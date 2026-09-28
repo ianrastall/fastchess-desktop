@@ -1,0 +1,838 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<help:manual
+    xmlns:help="urn:ucerl:help:1"
+    xmlns:xlink="http://www.w3.org/1999/xlink"
+    xml:id="ordo-help"
+    xml:lang="en"
+    product="Ordo"
+    product-version="1.2.6"
+    document-version="1.0.0">
+
+  <!--
+    Semantic conventions:
+      * Every addressable subject has a stable xml:id.
+      * ref and attributes ending in -ref contain one xml:id.
+      * refs and attributes ending in -refs contain space-separated xml:id values.
+      * Typed relations express non-hierarchical dependencies and interactions.
+      * evidence-refs connect behavioral claims to primary evidence in <sources>.
+  -->
+
+  <help:metadata xml:id="metadata">
+    <help:title>Ordo 1.2.6: Complete Rating, Reporting, and Workflow Help</help:title>
+    <help:subtitle>Rate PGN result pools, control identifiability, model uncertainty, and generate interoperable reports</help:subtitle>
+    <help:abstract>
+      Ordo reads completed game results from PGN, optionally normalizes and selects participants,
+      checks whether the result graph is rateable, fits relative player strengths, and emits rating,
+      uncertainty, matchup, connectivity, and compatibility reports. This manual documents the exact
+      local Windows executable and its matching upstream v1.2.6 source, including behaviors that the
+      shorter built-in switch list does not expose.
+    </help:abstract>
+    <help:document-status>Verified against the local executable and matching tagged upstream source.</help:document-status>
+    <help:last-verified date="2026-08-10" timezone="America/Chicago"/>
+    <help:local-artifact>
+      <help:path>D:\dev\proj\ucerl\ordo-win64.exe</help:path>
+      <help:sha256>219BE7081E63653C403AC4A0D8C0EECBAB31116F4F67028D9D817B8290C9C6EB</help:sha256>
+      <help:reported-version>ordo 1.2.6</help:reported-version>
+    </help:local-artifact>
+    <help:upstream-source tag="v1.2.6" commit="17eec774f2e4b9fdd2b1b38739f55ea221fb851a" commit-date="2016-04-19"/>
+    <help:authors>
+      <help:author role="software-author">Miguel A. Ballicora</help:author>
+      <help:author role="help-author">OpenAI Codex</help:author>
+    </help:authors>
+    <help:license-summary>
+      Ordo is distributed under the GNU General Public License, version 3 or later, without warranty.
+      Use <help:xref ref="opt-license">--license</help:xref> or consult
+      <help:xref ref="source-license">the upstream license</help:xref> for the full terms.
+    </help:license-summary>
+    <help:companion-documents>
+      <help:companion xlink:href="ordoprep-help.xml">
+        The workspace's Ordoprep XML manual documents the complementary PGN-cleaning and partitioning stage.
+      </help:companion>
+    </help:companion-documents>
+  </help:metadata>
+
+  <help:semantic-model xml:id="semantic-model" audience="maintainer integrator">
+    <help:title>How this XML is connected</help:title>
+    <help:description>
+      The document hierarchy is readable by people; stable identifiers, typed references, prerequisites,
+      constraints, and the relation graph make it usable as a knowledge base. Consumers can resolve every
+      internal *-ref attribute and xref to an xml:id, then traverse dependencies in either direction.
+    </help:description>
+    <help:reference-conventions>
+      <help:convention name="single-reference">ref, option-ref, topic-ref, stage-ref, category-ref, source-ref, and target-ref contain one xml:id.</help:convention>
+      <help:convention name="multiple-references">refs, evidence-refs, option-refs, topic-refs, requires-refs, and conflicts-with-refs contain space-separated xml:id values.</help:convention>
+      <help:convention name="external-reference">External resources use xlink:href and are outside the internal ID graph.</help:convention>
+      <help:convention name="behavioral-authority">Where prose documentation and the executable/source disagree, verified v1.2.6 behavior is authoritative here.</help:convention>
+    </help:reference-conventions>
+  </help:semantic-model>
+
+  <help:navigation xml:id="navigation">
+    <help:entry ref="quick-start" label="Quick start"/>
+    <help:entry ref="mental-model" label="Mental model"/>
+    <help:entry ref="command-syntax" label="Command syntax"/>
+    <help:entry ref="processing-pipeline" label="Processing order"/>
+    <help:entry ref="input-contract" label="PGN and auxiliary inputs"/>
+    <help:entry ref="rating-model" label="Rating model"/>
+    <help:entry ref="reference-scale" label="Reference and scale"/>
+    <help:entry ref="connectivity" label="Connectivity and perfect scores"/>
+    <help:entry ref="uncertainty" label="Simulation and uncertainty"/>
+    <help:entry ref="output-contract" label="Outputs and columns"/>
+    <help:entry ref="option-catalog" label="All options"/>
+    <help:entry ref="constraints" label="Interactions and prerequisites"/>
+    <help:entry ref="workflows" label="Task recipes"/>
+    <help:entry ref="troubleshooting" label="Troubleshooting"/>
+    <help:entry ref="glossary" label="Glossary"/>
+    <help:entry ref="sources" label="Evidence"/>
+  </help:navigation>
+
+  <help:topic xml:id="quick-start" kind="task" audience="all" task="rate">
+    <help:title>Quick start</help:title>
+    <help:purpose>Calculate a conventional rating list from one PGN file.</help:purpose>
+    <help:command xml:id="cmd-basic"><![CDATA[.\ordo-win64.exe -p games.pgn -o ratings.txt]]></help:command>
+    <help:result>
+      <help:artifact role="primary-output" media-type="text/plain">ratings.txt</help:artifact>
+      <help:description>
+        Ratings are placed on a scale whose pool average is 2300. The default table shows rank, player,
+        rating, points, games, and score percentage. With no simulations, its ERROR column is omitted.
+      </help:description>
+    </help:result>
+    <help:caveats>
+      <help:item>The file must contain case-sensitive White, Black, and Result tags in Ordo's supported line-oriented form.</help:item>
+      <help:item>The usable result graph must be well connected; inspect failures with <help:xref ref="workflow-groups">the group workflow</help:xref>.</help:item>
+      <help:item>Point ratings are relative. Choose an explicit anchor when comparison with an established scale matters.</help:item>
+    </help:caveats>
+    <help:next-steps>
+      <help:xref ref="workflow-uncertainty">Add confidence intervals</help:xref>
+      <help:xref ref="workflow-anchor">Anchor a known participant</help:xref>
+      <help:xref ref="workflow-csv">Create machine-readable CSV</help:xref>
+      <help:xref ref="workflow-clean-rate">Normalize and select identities</help:xref>
+    </help:next-steps>
+  </help:topic>
+
+  <help:topic xml:id="mental-model" kind="concept" audience="all">
+    <help:title>Mental model</help:title>
+    <help:summary>
+      Ordo is an in-memory result-pool estimator. It turns decisive and drawn encounters into a connected
+      comparison graph, fits relative strengths under a logistic expectancy model, optionally estimates
+      nuisance parameters and sampling uncertainty, and renders several views of the fitted pool.
+    </help:summary>
+    <help:capabilities>
+      <help:capability xml:id="cap-ingest" verb="ingest" object="PGN results">Read multiple result-only or full PGN files into one pool.</help:capability>
+      <help:capability xml:id="cap-identities" verb="canonicalize" object="participant identities">Apply aliases before inclusion, exclusion, priors, and reports.</help:capability>
+      <help:capability xml:id="cap-connectivity" verb="diagnose" object="rateability">Detect independent or directionally underconstrained groups and perfect-score boundary cases.</help:capability>
+      <help:capability xml:id="cap-fit" verb="fit" object="relative strength">Use iterative moment matching by default or full maximum likelihood when selected or required by priors.</help:capability>
+      <help:capability xml:id="cap-uncertainty" verb="simulate" object="rating uncertainty">Replay fitted outcome probabilities to estimate standard errors, pairwise margins, and confidence factors.</help:capability>
+      <help:capability xml:id="cap-report" verb="report" object="rating views">Write text, CSV, Elostat-compatible files, matrices, head-to-head, and group reports.</help:capability>
+    </help:capabilities>
+    <help:non-goals>
+      <help:item>Ordo does not parse or validate chess moves; only the White, Black, and Result tag lines matter.</help:item>
+      <help:item>Ordo does not preserve PGN or produce a cleaned PGN; use <help:xref ref="term-ordoprep">Ordoprep</help:xref> for that.</help:item>
+      <help:item>Ordo does not make ratings from disconnected pools inherently comparable.</help:item>
+      <help:item>Ordo's simulated error bars describe sampling variability under its fitted model, not every source of real-world uncertainty.</help:item>
+    </help:non-goals>
+  </help:topic>
+
+  <help:topic xml:id="command-syntax" kind="reference" audience="all">
+    <help:title>Command syntax and source order</help:title>
+    <help:syntax><![CDATA[.\ordo-win64.exe [OPTIONS] [--] [PGN_FILE ...]]]></help:syntax>
+    <help:syntax-notes>
+      <help:note>Use <help:code>--</help:code> before positional paths that begin with a hyphen.</help:note>
+      <help:note>Quote paths containing spaces. This executable has no standard-input switch.</help:note>
+      <help:note>Options may appear around positional inputs, but all input sources are assembled and read in the fixed order below.</help:note>
+    </help:syntax-notes>
+    <help:input-composition evidence-refs="source-main source-pgnget">
+      <help:source-order rank="1" option-ref="opt-pgn">The path supplied by the last -p occurrence, if any.</help:source-order>
+      <help:source-order rank="2" option-ref="opt-pgn-list">Paths from the list supplied by the last -P occurrence, in list order.</help:source-order>
+      <help:source-order rank="3" option-ref="opt-positional-input">Positional PGN paths, in command-line order.</help:source-order>
+    </help:input-composition>
+    <help:memory-note>Games, encounters, and participant names are accumulated in memory before fitting.</help:memory-note>
+  </help:topic>
+
+  <help:topic xml:id="processing-pipeline" kind="concept" audience="all">
+    <help:title>Processing pipeline</help:title>
+    <help:summary>Option timing explains why canonicalization changes filters, why low-output thresholds do not change ratings, and why some report modes exit early.</help:summary>
+    <help:stages>
+      <help:stage xml:id="stage-options" ordinal="1" name="options"><help:description>Parse switches, defaults, conflicts, and column formatting.</help:description></help:stage>
+      <help:stage xml:id="stage-aliases" ordinal="2" name="aliases"><help:description>Load the alias map before any player is created.</help:description></help:stage>
+      <help:stage xml:id="stage-ingest" ordinal="3" name="ingest"><help:description>Read PGN sources and retain completed result triples.</help:description></help:stage>
+      <help:stage xml:id="stage-ignore-draws" ordinal="4" name="ignore-draws"><help:description>If requested, mark drawn games ignored before membership filtering and analysis.</help:description></help:stage>
+      <help:stage xml:id="stage-membership" ordinal="5" name="membership"><help:description>Apply one include list or one exclude list to canonical names.</help:description></help:stage>
+      <help:stage xml:id="stage-aggregate" ordinal="6" name="aggregate"><help:description>Build players and aggregate White/Black encounter counts.</help:description></help:stage>
+      <help:stage xml:id="stage-priors" ordinal="7" name="priors"><help:description>Resolve hard anchors, loose anchors, pairwise relations, and white/draw settings against the selected pool.</help:description></help:stage>
+      <help:stage xml:id="stage-groups" ordinal="8" name="groups"><help:description>Check rating connectivity by default, or write the requested group report.</help:description></help:stage>
+      <help:stage xml:id="stage-perfect" ordinal="9" name="perfect-boundaries"><help:description>Temporarily remove unanchored all-win and all-loss boundary players so the ordinary pool can converge.</help:description></help:stage>
+      <help:stage xml:id="stage-fit" ordinal="10" name="fit"><help:description>Fit ratings and any requested nuisance parameters.</help:description></help:stage>
+      <help:stage xml:id="stage-simulate" ordinal="11" name="simulate"><help:description>When the count exceeds one, replay fitted outcomes and measure rating dispersion.</help:description></help:stage>
+      <help:stage xml:id="stage-restore" ordinal="12" name="restore"><help:description>Restore original encounters for reporting and assign finite bounds to removed perfect players.</help:description></help:stage>
+      <help:stage xml:id="stage-report" ordinal="13" name="report"><help:description>Apply display thresholds and write each requested view.</help:description></help:stage>
+    </help:stages>
+  </help:topic>
+
+  <help:topic xml:id="input-contract" kind="reference" audience="all">
+    <help:title>Input contract</help:title>
+    <help:subtopic xml:id="pgn-contract">
+      <help:title>Recognized PGN</help:title>
+      <help:description evidence-refs="source-pgnget">
+        The scanner recognizes lines beginning exactly and case-sensitively with <help:code>[White "</help:code>,
+        <help:code>[Black "</help:code>, and <help:code>[Result "</help:code>. Conventional one-tag-per-line PGN is safest.
+        Movetext, comments, and all other tags are ignored.
+      </help:description>
+      <help:accepted-results>
+        <help:result token="1-0" meaning="White win"/>
+        <help:result token="0-1" meaning="Black win"/>
+        <help:result token="1/2-1/2" meaning="Draw"/>
+        <help:result token="=-=" meaning="Draw"/>
+        <help:result token="*" meaning="Incomplete; discard"/>
+      </help:accepted-results>
+      <help:warning>Any other Result value is a fatal input error. A game needs White, Black, and Result tags to become a usable record.</help:warning>
+      <help:example xml:id="example-minimal-pgn"><![CDATA[[White "Engine A"]
+[Black "Engine B"]
+[Result "1-0"]
+
+1-0]]></help:example>
+    </help:subtopic>
+
+    <help:subtopic xml:id="alias-format">
+      <help:title>Alias CSV</help:title>
+      <help:format><![CDATA["Canonical name","Alias one","Alias two",...]]></help:format>
+      <help:semantics>Every alias in a row maps to its first field. Matching is exact and case-sensitive. Canonicalization happens before filtering, anchoring, priors, and reporting.</help:semantics>
+      <help:example><![CDATA["Stockfish","Stockfish 16","sf16"
+"Komodo Dragon","Dragon 3.3","KD 3.3"]]></help:example>
+    </help:subtopic>
+
+    <help:subtopic xml:id="name-list-format">
+      <help:title>Include and exclude name lists</help:title>
+      <help:format>One CSV field per nonblank line; quoted names are accepted.</help:format>
+      <help:warning evidence-refs="source-pgnget source-manual">
+        The v1.2.6 source requires exactly one CSV field per row. Older prose saying that only the first
+        column is read is too permissive; do not add annotation columns.
+      </help:warning>
+      <help:selection-rule option-ref="opt-include">An included game requires both canonical player names to be listed.</help:selection-rule>
+      <help:selection-rule option-ref="opt-exclude">A game is excluded if either canonical player name is listed.</help:selection-rule>
+      <help:warning>Names not found in the pool generate warnings unless <help:xref ref="opt-no-warnings">--no-warnings</help:xref> is active.</help:warning>
+    </help:subtopic>
+
+    <help:subtopic xml:id="pgn-list-format">
+      <help:title>PGN source list</help:title>
+      <help:format>One CSV field containing one path per nonblank line. Paths are opened in list order.</help:format>
+      <help:example><![CDATA["season 1.pgn"
+season2.pgn]]></help:example>
+    </help:subtopic>
+
+    <help:subtopic xml:id="hard-anchor-format">
+      <help:title>Multiple hard anchors</help:title>
+      <help:format><![CDATA["Player",rating]]></help:format>
+      <help:semantics>Fix each named player exactly at the supplied rating. Use exactly two fields for portability; v1.2.6 ignores extras.</help:semantics>
+      <help:example><![CDATA["Reference Engine",3000
+"Second Reference",2950]]></help:example>
+    </help:subtopic>
+
+    <help:subtopic xml:id="loose-anchor-format">
+      <help:title>Loose anchors</help:title>
+      <help:format><![CDATA["Player",rating,standard_deviation]]></help:format>
+      <help:semantics>
+        Add a Gaussian prior centered on rating. The uncertainty is one standard deviation: approximately
+        68 percent of prior mass lies within plus or minus that value. A zero-like uncertainty becomes a hard anchor;
+        negative uncertainty is invalid. Extra uncertainty fields are combined in quadrature by v1.2.6, but the three-field form is clearest.
+      </help:semantics>
+      <help:example><![CDATA["Established Engine",3200,15]]></help:example>
+    </help:subtopic>
+
+    <help:subtopic xml:id="relation-format">
+      <help:title>Pairwise rating relations</help:title>
+      <help:format><![CDATA["Player A","Player B",rating_delta,standard_deviation]]></help:format>
+      <help:semantics>
+        Add a Gaussian prior for <help:code>rating(Player A) - rating(Player B)</help:code>, centered on
+        rating_delta with the supplied positive standard deviation. Exactly four fields are required;
+        a zero or negative uncertainty is rejected.
+      </help:semantics>
+      <help:example><![CDATA["Engine 2.0","Engine 1.0",42,8]]></help:example>
+    </help:subtopic>
+
+    <help:subtopic xml:id="column-format-file">
+      <help:title>Column-format CSV</help:title>
+      <help:format><![CDATA[column_number,width,"Heading"]]></help:format>
+      <help:semantics>Override a report column's heading and text width. The width must exceed the heading length; rank/name column 0 is auto-sized. Headings also flow into CSV.</help:semantics>
+      <help:example><![CDATA[1,9,"Elo"
+4,8,"Played"]]></help:example>
+    </help:subtopic>
+  </help:topic>
+
+  <help:topic xml:id="rating-model" kind="concept" audience="advanced integrator">
+    <help:title>Rating and outcome model</help:title>
+    <help:subtopic xml:id="logistic-expectancy">
+      <help:title>Logistic expectancy</help:title>
+      <help:formula notation="plain"><![CDATA[P(B scores over A) = 1 / (1 + exp(-beta * (R_B - R_A)))]]></help:formula>
+      <help:description>Higher ratings mean greater strength. The scale parameter beta is chosen so the rating gap supplied by <help:xref ref="opt-scale">-z</help:xref> gives 76 percent expectancy.</help:description>
+      <help:formula notation="plain"><![CDATA[beta = -ln(1 / 0.76 - 1) / scale_76]]></help:formula>
+    </help:subtopic>
+    <help:subtopic xml:id="default-estimator">
+      <help:title>Default estimator</help:title>
+      <help:description evidence-refs="source-rating source-rtngcalc">
+        The ordinary solver iteratively adjusts player ratings to minimize squared differences between observed
+        points and model-expected points. It is fast and normally agrees closely with full maximum likelihood.
+      </help:description>
+    </help:subtopic>
+    <help:subtopic xml:id="maximum-likelihood">
+      <help:title>Maximum likelihood</help:title>
+      <help:description evidence-refs="source-ratingb source-relprior">
+        <help:xref ref="opt-ml">-M</help:xref> uses the complete win/draw/loss likelihood. Loose player priors,
+        pairwise relations, and uncertain white/draw parameters require this mode and enable it automatically.
+      </help:description>
+    </help:subtopic>
+    <help:subtopic xml:id="draw-model">
+      <help:title>Draw-aware outcome probabilities</help:title>
+      <help:description>
+        Ordo uses the equal-opponent draw rate together with rating difference to divide total expectancy into
+        win, draw, and loss probabilities. In maximum-likelihood fits this affects the game likelihood; in
+        simulations it governs generated W/D/L outcomes.
+      </help:description>
+      <help:formula notation="plain"><![CDATA[D^2 = (2 * D_equal / (1 - D_equal))^2 * W * L]]></help:formula>
+    </help:subtopic>
+    <help:subtopic xml:id="white-model">
+      <help:title>Color advantage</help:title>
+      <help:description>A white advantage is a rating offset added to White's expected performance. It may be fixed, constrained by a Gaussian prior, or estimated from the pool.</help:description>
+    </help:subtopic>
+  </help:topic>
+
+  <help:topic xml:id="reference-scale" kind="concept" audience="all">
+    <help:title>Reference level, anchors, and scale</help:title>
+    <help:subtopic xml:id="additive-reference">
+      <help:title>Ratings need an additive reference</help:title>
+      <help:description>
+        Game results identify differences, not an absolute zero. With no anchor, Ordo shifts the fitted list to
+        the average set by <help:xref ref="opt-average">-a</help:xref>, 2300 by default. A hard anchor fixes a named
+        participant instead; a loose anchor supplies uncertain outside information.
+      </help:description>
+    </help:subtopic>
+    <help:subtopic xml:id="anchor-types">
+      <help:title>Reference choices</help:title>
+      <help:choice option-ref="opt-anchor">One named hard anchor at the value from -a.</help:choice>
+      <help:choice option-ref="opt-multi-anchors">Multiple named hard anchors from a file.</help:choice>
+      <help:choice option-ref="opt-loose-anchors">One or more uncertain player priors from a file.</help:choice>
+      <help:choice option-ref="opt-relations">Uncertain pairwise differences from a file.</help:choice>
+    </help:subtopic>
+    <help:subtopic xml:id="multiplicative-scale">
+      <help:title>Scale is distinct from reference</help:title>
+      <help:description>
+        <help:xref ref="opt-scale">-z</help:xref> controls how many rating points represent a given expectancy;
+        it does not choose the list's average. The default is 202 points for 76 percent expectancy.
+      </help:description>
+    </help:subtopic>
+    <help:warning>
+      Ratings from separate pools are not automatically comparable merely because they share an average or scale.
+      Use shared participants or defensible priors and consistent modeling conditions.
+    </help:warning>
+  </help:topic>
+
+  <help:topic xml:id="connectivity" kind="concept" audience="all">
+    <help:title>Connectivity, identifiability, and perfect scores</help:title>
+    <help:subtopic xml:id="connectivity-check">
+      <help:title>Connectivity is checked by default</help:title>
+      <help:description evidence-refs="source-groups source-encount source-main">
+        Ordo constructs a directed result graph from aggregated pairings. A draw or mixed results supplies a
+        connection in both directions; a one-sided sweep supplies only the winner-to-loser direction. Cycles form
+        strongly connected groups. A conventional finite joint fit requires the retained ordinary pool to be well connected.
+      </help:description>
+      <help:group-order>Reported groups are ordered by descending participant count, with alphabetical tie-breaking.</help:group-order>
+    </help:subtopic>
+    <help:subtopic xml:id="perfect-players">
+      <help:title>All-win and all-loss boundary players</help:title>
+      <help:description>
+        Unanchored participants with 100 percent or 0 percent scores have an infinite optimum in an unconstrained
+        logistic fit. Ordo removes them recursively while fitting the ordinary pool, then restores them with finite
+        one-draw bounds for reporting.
+      </help:description>
+      <help:marker symbol="&gt;">A perfect winner's displayed rating is a lower bound.</help:marker>
+      <help:marker symbol="&lt;">A perfect loser's displayed rating is an upper bound.</help:marker>
+      <help:marker symbol="*">The participant has no retained games.</help:marker>
+      <help:note>Anchored or priored boundary players may remain finite because outside information constrains them.</help:note>
+    </help:subtopic>
+    <help:subtopic xml:id="force-warning">
+      <help:title>Forcing a disconnected fit</help:title>
+      <help:description>
+        <help:xref ref="opt-force">-G</help:xref> bypasses group checking. It does not create missing information:
+        fitting may be slow or fail, and offsets between independent components are arbitrary. Prefer diagnosing and
+        repairing the pool.</help:description>
+    </help:subtopic>
+  </help:topic>
+
+  <help:topic xml:id="uncertainty" kind="concept" audience="all">
+    <help:title>Simulation, error margins, and pairwise confidence</help:title>
+    <help:subtopic xml:id="simulation-method">
+      <help:title>Monte Carlo method</help:title>
+      <help:description evidence-refs="source-sim">
+        Ordo samples new outcomes from the fitted matchup probabilities, refits each synthetic pool, and measures
+        rating dispersion. Execution occurs only when <help:xref ref="opt-simulations">-s</help:xref> is greater than one.
+        The upstream manual recommends at least about 100 simulations; more than about 1000 is usually unnecessary.
+      </help:description>
+    </help:subtopic>
+    <help:subtopic xml:id="error-reference">
+      <help:title>What a row error is relative to</help:title>
+      <help:description>
+        With one hard anchor, row errors default to changes relative to that anchor, whose displayed error is zero.
+        Without such an anchor they are relative to the simulated pool average. <help:xref ref="opt-pool-relative">-V</help:xref>
+        selects pool-relative errors even when a single anchor exists.
+      </help:description>
+      <help:warning>Do not infer a two-player difference error by mechanically combining two row errors. Use the pairwise error matrix.</help:warning>
+    </help:subtopic>
+    <help:subtopic xml:id="confidence-transform">
+      <help:title>Confidence level</help:title>
+      <help:description>
+        <help:xref ref="opt-confidence">-F</help:xref> converts simulated standard deviations to symmetric normal
+        confidence half-widths. The default 95 percent interval is approximately plus or minus 1.96 standard deviations.
+      </help:description>
+    </help:subtopic>
+    <help:subtopic xml:id="cfs-definition">
+      <help:title>Confidence for superiority</help:title>
+      <help:description>CFS is the simulated probability, expressed as a percentage, that one player's rating exceeds another's under Ordo's simulation model.</help:description>
+    </help:subtopic>
+  </help:topic>
+
+  <help:topic xml:id="output-contract" kind="reference" audience="all">
+    <help:title>Output contract</help:title>
+    <help:outputs>
+      <help:output xml:id="output-text" option-ref="opt-output" media-type="text/plain">
+        <help:title>Rating text</help:title>
+        <help:description>Written to -o when supplied; otherwise the ordinary report goes to standard output. Without simulations the ERROR column is removed.</help:description>
+      </help:output>
+      <help:output xml:id="output-csv" option-ref="opt-csv" media-type="text/csv">
+        <help:title>Rating CSV</help:title>
+        <help:description>May coexist with text. Column 0 expands to separate rank and PLAYER fields. Without simulations a selected ERROR field contains a hyphen placeholder.</help:description>
+      </help:output>
+      <help:output xml:id="output-elostat" option-ref="opt-elostat" media-type="text/plain">
+        <help:title>Elostat compatibility set</help:title>
+        <help:description>Overwrites general.dat, rating.dat, and programs.dat in the current working directory.</help:description>
+      </help:output>
+      <help:output xml:id="output-head2head" option-ref="opt-head2head" media-type="text/plain"><help:title>Head-to-head report</help:title><help:description>Summarizes each pairing; simulation-dependent difference uncertainty and CFS are available when simulations run.</help:description></help:output>
+      <help:output xml:id="output-groups" option-ref="opt-groups" media-type="text/plain"><help:title>Connectivity group report</help:title><help:description>If neither text nor CSV rating output is explicitly requested, Ordo writes this report and exits successfully before rating. If -o or -c is also supplied, it continues into rating and still enforces post-purge connectivity.</help:description></help:output>
+      <help:output xml:id="output-error-matrix" option-ref="opt-error-matrix" media-type="text/plain"><help:title>Pairwise confidence-margin matrix</help:title><help:prerequisite refs="opt-simulations rule-matrix-simulations">Requires more than one simulation; otherwise the file is silently not created.</help:prerequisite></help:output>
+      <help:output xml:id="output-cfs-matrix" option-ref="opt-cfs-matrix" media-type="text/plain"><help:title>CFS matrix</help:title><help:prerequisite refs="opt-simulations rule-matrix-simulations">Requires more than one simulation; otherwise the file is silently not created.</help:prerequisite></help:output>
+    </help:outputs>
+
+    <help:subtopic xml:id="report-columns">
+      <help:title>Selectable report columns</help:title>
+      <help:columns default="0,1,2,3,4,5">
+        <help:column xml:id="column-0" number="0" name="rank-player" simulation-dependent="false">Rank and player name; CSV expands this to two fields.</help:column>
+        <help:column xml:id="column-1" number="1" name="rating" simulation-dependent="false">Fitted rating or perfect-score bound.</help:column>
+        <help:column xml:id="column-2" number="2" name="error" simulation-dependent="true">Confidence half-width at the selected confidence level.</help:column>
+        <help:column xml:id="column-3" number="3" name="points" simulation-dependent="false">Wins plus half draws.</help:column>
+        <help:column xml:id="column-4" number="4" name="games" simulation-dependent="false">Retained game count.</help:column>
+        <help:column xml:id="column-5" number="5" name="score-percent" simulation-dependent="false">Points divided by games, as a percentage.</help:column>
+        <help:column xml:id="column-6" number="6" name="cfs-next" simulation-dependent="true">CFS against the next row in rating order.</help:column>
+        <help:column xml:id="column-7" number="7" name="wins" simulation-dependent="false">Wins.</help:column>
+        <help:column xml:id="column-8" number="8" name="draws" simulation-dependent="false">Draws.</help:column>
+        <help:column xml:id="column-9" number="9" name="losses" simulation-dependent="false">Losses.</help:column>
+        <help:column xml:id="column-10" number="10" name="draw-percent" simulation-dependent="false">Draws divided by games, as a percentage.</help:column>
+        <help:column xml:id="column-11" number="11" name="opponent-average" simulation-dependent="false">Game-weighted average opponent rating.</help:column>
+        <help:column xml:id="column-12" number="12" name="opponent-error" simulation-dependent="true">Game-weighted average opponent error.</help:column>
+        <help:column xml:id="column-13" number="13" name="opponent-count" simulation-dependent="false">Number of unique opponents.</help:column>
+        <help:column xml:id="column-14" number="14" name="opponent-diversity" simulation-dependent="false">Effective opponent count, exp(-sum f_i ln f_i); equals the unique count when games are evenly distributed.</help:column>
+      </help:columns>
+    </help:subtopic>
+
+    <help:subtopic xml:id="formatting-semantics">
+      <help:title>Formatting details</help:title>
+      <help:description>
+        The verified default for <help:xref ref="opt-decimals">-N</help:xref> is <help:code>1,0</help:code>:
+        one decimal for ratings/errors and zero decimals for text percentages. This differs from stale manual prose.
+        Text points retain one decimal. CSV uses fixed precision for several statistics; its rating, error, and
+        opponent-average fields follow the first -N value, while its points and percentages are not controlled uniformly by the second value.
+      </help:description>
+      <help:note>Rows are sorted by descending rating. The output game threshold changes visibility only, not the fitted data.</help:note>
+    </help:subtopic>
+  </help:topic>
+
+  <help:option-catalog xml:id="option-catalog">
+    <help:title>Complete option catalog</help:title>
+
+    <help:category xml:id="category-information" name="Information and diagnostics">
+      <help:option xml:id="opt-help" short="-h" long="--help" argument="none"><help:summary>Show usage and the ordinary switch list.</help:summary><help:exit-behavior>Exit success without reading PGN.</help:exit-behavior></help:option>
+      <help:option xml:id="opt-show-switches" short="-H" long="--show-switches" argument="none"><help:summary>Show the complete switch list with short and long spellings.</help:summary><help:exit-behavior>Exit success.</help:exit-behavior></help:option>
+      <help:option xml:id="opt-version" short="-v" long="--version" argument="none"><help:summary>Print the program version.</help:summary><help:exit-behavior>Exit success.</help:exit-behavior></help:option>
+      <help:option xml:id="opt-license" short="-L" long="--license" argument="none"><help:summary>Print copyright and license information.</help:summary><help:exit-behavior>Exit success.</help:exit-behavior></help:option>
+      <help:option xml:id="opt-quiet" short="-q" long="--quiet" aliases="--silent" argument="none"><help:summary>Suppress ordinary progress messages and the simulation counter.</help:summary><help:note>Does not suppress unmatched-name warnings or --timelog output.</help:note></help:option>
+      <help:option xml:id="opt-terse" short="-Q" long="--terse" argument="none"><help:summary>Suppress ordinary progress messages but retain the simulation counter.</help:summary></help:option>
+      <help:option xml:id="opt-timelog" long="--timelog" argument="none"><help:summary>Print elapsed-time checkpoints to standard output.</help:summary><help:warning>Use -o for ratings if stdout must remain machine-clean.</help:warning></help:option>
+      <help:option xml:id="opt-no-warnings" long="--no-warnings" argument="none"><help:summary>Suppress nonfatal warnings, including unmatched names in selection files.</help:summary></help:option>
+    </help:category>
+
+    <help:category xml:id="category-reference" name="Rating reference and priors">
+      <help:option xml:id="opt-average" short="-a" long="--average" argument="NUM" default="2300"><help:summary>Set the pool average, or the rating of a single named anchor.</help:summary><help:interaction>When -A is used, this value belongs to that anchor instead of the pool mean.</help:interaction></help:option>
+      <help:option xml:id="opt-anchor" short="-A" long="--anchor" argument="PLAYER"><help:summary>Fix one named player at the -a rating.</help:summary><help:repeatability>Only the last occurrence is retained; use -m for multiple anchors.</help:repeatability></help:option>
+      <help:option xml:id="opt-pool-relative" short="-V" long="--pool-relative" argument="none" requires-refs="opt-simulations"><help:summary>Reference simulated row errors to the pool average even when a single anchor is present.</help:summary><help:note>Does not change fitted point ratings.</help:note></help:option>
+      <help:option xml:id="opt-multi-anchors" short="-m" long="--multi-anchors" argument="FILE" conflicts-with-refs="opt-average opt-anchor"><help:summary>Read multiple exact player-rating anchors.</help:summary><help:format-ref ref="hard-anchor-format"/></help:option>
+      <help:option xml:id="opt-loose-anchors" short="-y" long="--loose-anchors" argument="FILE" conflicts-with-refs="opt-average"><help:summary>Read Gaussian player-rating priors.</help:summary><help:format-ref ref="loose-anchor-format"/><help:effect>Forces maximum likelihood.</help:effect></help:option>
+      <help:option xml:id="opt-relations" short="-r" long="--relations" argument="FILE"><help:summary>Read Gaussian priors on pairwise rating differences.</help:summary><help:format-ref ref="relation-format"/><help:effect>Forces maximum likelihood.</help:effect></help:option>
+      <help:option xml:id="opt-remove-older" short="-R" long="--remove-older" argument="none" requires-refs="opt-relations"><help:summary>Hide the second player from each relation row as an older version.</help:summary><help:note>Without this switch, relation-second players remain visible but are unranked and rank numbering skips them.</help:note></help:option>
+    </help:category>
+
+    <help:category xml:id="category-model" name="Model parameters and estimator">
+      <help:option xml:id="opt-white" short="-w" long="--white" argument="NUM" default="0"><help:summary>Fix White's advantage at NUM rating points.</help:summary></help:option>
+      <help:option xml:id="opt-white-error" short="-u" long="--white-error" argument="NUM"><help:summary>Give the -w value a Gaussian one-sigma uncertainty.</help:summary><help:usage>Pair with -w; a positive value lets the parameter adjust and forces maximum likelihood.</help:usage></help:option>
+      <help:option xml:id="opt-white-auto" short="-W" long="--white-auto" argument="none" conflicts-with-refs="opt-white opt-white-error"><help:summary>Estimate White advantage automatically from the observed color score.</help:summary></help:option>
+      <help:option xml:id="opt-draw" short="-d" long="--draw" argument="NUM" default="50"><help:summary>Fix equal-opponent draw rate to NUM percent.</help:summary><help:range>Use a practical value from 0 through 99.9.</help:range></help:option>
+      <help:option xml:id="opt-draw-error" short="-k" long="--draw-error" argument="NUM"><help:summary>Give the -d value a Gaussian one-sigma uncertainty in percentage points.</help:summary><help:usage>Pair with -d; a positive value lets the parameter adjust and forces maximum likelihood.</help:usage></help:option>
+      <help:option xml:id="opt-draw-auto" short="-D" long="--draw-auto" argument="none" conflicts-with-refs="opt-draw opt-draw-error"><help:summary>Estimate the equal-opponent draw rate automatically.</help:summary></help:option>
+      <help:option xml:id="opt-scale" short="-z" long="--scale" argument="NUM" default="202"><help:summary>Set the rating gap that corresponds to 76 percent logistic expectancy.</help:summary><help:recommendation>Use a positive value.</help:recommendation></help:option>
+      <help:option xml:id="opt-ml" short="-M" long="--ML" argument="none"><help:summary>Use full maximum-likelihood fitting.</help:summary><help:note>Slower than the default estimator; enabled automatically by uncertain priors.</help:note></help:option>
+      <help:option xml:id="opt-ignore-draws" short="-X" long="--ignore-draws" argument="none"><help:summary>Ignore all draws before selection, connectivity analysis, and fitting.</help:summary><help:warning>Experimental; it can materially alter connectivity and the estimand.</help:warning></help:option>
+    </help:category>
+
+    <help:category xml:id="category-input" name="Input and selection">
+      <help:option xml:id="opt-pgn" short="-p" long="--pgn" argument="FILE"><help:summary>Read one primary PGN file.</help:summary><help:repeatability>Only the last occurrence is retained.</help:repeatability></help:option>
+      <help:option xml:id="opt-pgn-list" short="-P" long="--pgn-list" argument="FILE"><help:summary>Read PGN paths from a one-field-per-line list.</help:summary><help:repeatability>Only the last occurrence is retained.</help:repeatability></help:option>
+      <help:option xml:id="opt-positional-input" spelling="PGN_FILE" argument="PATH" repeatable="true"><help:summary>Read positional PGN files after -p and -P sources.</help:summary></help:option>
+      <help:option xml:id="opt-synonyms" short="-Y" long="--synonyms" aliases="--aliases" argument="FILE"><help:summary>Canonicalize player names from an alias CSV before later processing.</help:summary><help:format-ref ref="alias-format"/></help:option>
+      <help:option xml:id="opt-include" short="-i" long="--include" argument="FILE" conflicts-with-refs="opt-exclude"><help:summary>Keep only games for which both canonical names appear in the one-column list.</help:summary><help:format-ref ref="name-list-format"/></help:option>
+      <help:option xml:id="opt-exclude" short="-x" long="--exclude" argument="FILE" conflicts-with-refs="opt-include"><help:summary>Drop every game involving any canonical name in the one-column list.</help:summary><help:format-ref ref="name-list-format"/></help:option>
+    </help:category>
+
+    <help:category xml:id="category-output" name="Rating and analysis outputs">
+      <help:option xml:id="opt-table" short="-T" long="--table" argument="none"><help:summary>Print an expectancy lookup table for the selected -z scale.</help:summary><help:exit-behavior>Exit success without requiring PGN.</help:exit-behavior></help:option>
+      <help:option xml:id="opt-output" short="-o" long="--output" argument="FILE"><help:summary>Write the formatted rating report to FILE instead of stdout.</help:summary></help:option>
+      <help:option xml:id="opt-csv" short="-c" long="--csv" argument="FILE"><help:summary>Write a machine-readable rating table in CSV format.</help:summary></help:option>
+      <help:option xml:id="opt-elostat" short="-E" long="--elostat" argument="none"><help:summary>Write general.dat, rating.dat, and programs.dat in Elostat-compatible form.</help:summary><help:warning>Those fixed filenames are overwritten in the current working directory.</help:warning></help:option>
+      <help:option xml:id="opt-head2head" short="-j" long="--head2head" argument="FILE"><help:summary>Write a per-pair matchup report.</help:summary></help:option>
+      <help:option xml:id="opt-groups" short="-g" long="--groups" argument="FILE" conflicts-with-refs="opt-force"><help:summary>Write the connectivity-group report.</help:summary><help:exit-behavior>Without explicit -o or -c, exit after the group report; with either, continue to rating.</help:exit-behavior></help:option>
+      <help:option xml:id="opt-force" short="-G" long="--force" argument="none" conflicts-with-refs="opt-groups"><help:summary>Skip connectivity checking and attempt the fit.</help:summary><help:warning>Does not make disconnected components identifiable.</help:warning></help:option>
+      <help:option xml:id="opt-threshold" short="-t" long="--threshold" argument="NUM" default="0"><help:summary>Show only players with at least NUM games in final rating-style outputs.</help:summary><help:note>Display-only: hidden players and their games still affect fitting.</help:note></help:option>
+      <help:option xml:id="opt-error-matrix" short="-e" long="--error-matrix" argument="FILE" requires-refs="opt-simulations"><help:summary>Write pairwise confidence half-widths for rating differences.</help:summary></help:option>
+      <help:option xml:id="opt-cfs-matrix" short="-C" long="--cfs-matrix" argument="FILE" requires-refs="opt-simulations"><help:summary>Write a matrix of confidence-for-superiority percentages.</help:summary></help:option>
+      <help:option xml:id="opt-cfs-show" short="-J" long="--cfs-show" argument="none" requires-refs="opt-simulations"><help:summary>Force column 6, CFS against the next ranked row, into the rating report.</help:summary></help:option>
+    </help:category>
+
+    <help:category xml:id="category-simulation" name="Simulation and confidence">
+      <help:option xml:id="opt-simulations" short="-s" long="--simulations" argument="NUM" default="0"><help:summary>Request NUM Monte Carlo rating simulations.</help:summary><help:range>Simulation runs only when NUM is greater than one; about 100 to 1000 is a practical range.</help:range></help:option>
+      <help:option xml:id="opt-confidence" short="-F" long="--confidence" argument="NUM" default="95"><help:summary>Set the normal confidence percentage used for reported error margins.</help:summary><help:range>Accepted range is greater than 50 and less than 100 percent.</help:range></help:option>
+      <help:option xml:id="opt-cpus" short="-n" long="--cpus" argument="NUM" default="1"><help:summary>Use NUM worker CPUs for simulations.</help:summary><help:range>NUM must be at least 1.</help:range><help:note>Does not parallelize the primary point-rating fit.</help:note></help:option>
+    </help:category>
+
+    <help:category xml:id="category-formatting" name="Report formatting">
+      <help:option xml:id="opt-decimals" short="-N" long="--decimals" argument="a,b" default="1,0"><help:summary>Set rating/error decimals and text score/draw-percentage decimals.</help:summary><help:note>At most two nonnegative integers. The verified executable default is 1,0.</help:note></help:option>
+      <help:option xml:id="opt-columns" short="-U" long="--columns" argument="a,..,z" default="0,1,2,3,4,5"><help:summary>Select and order report columns numbered 0 through 14.</help:summary><help:xref ref="report-columns">Column definitions</help:xref></help:option>
+      <help:option xml:id="opt-column-format" short="-b" long="--column-format" argument="FILE"><help:summary>Override column widths and headings from CSV.</help:summary><help:format-ref ref="column-format-file"/></help:option>
+    </help:category>
+  </help:option-catalog>
+
+  <help:constraints xml:id="constraints">
+    <help:title>Conflicts, dependencies, and semantic rules</help:title>
+    <help:rule xml:id="rule-anchor-conflict" kind="conflict" option-refs="opt-multi-anchors opt-average opt-anchor">-m conflicts with an explicitly supplied -a or any -A.</help:rule>
+    <help:rule xml:id="rule-loose-average-conflict" kind="conflict" option-refs="opt-loose-anchors opt-average">-y conflicts with an explicitly supplied -a, but may coexist with -A.</help:rule>
+    <help:rule xml:id="rule-white-conflict" kind="conflict" option-refs="opt-white-auto opt-white opt-white-error">-W conflicts with either -w or -u.</help:rule>
+    <help:rule xml:id="rule-draw-conflict" kind="conflict" option-refs="opt-draw-auto opt-draw opt-draw-error">-D conflicts with either -d or -k.</help:rule>
+    <help:rule xml:id="rule-selection-conflict" kind="conflict" option-refs="opt-include opt-exclude">Include and exclude modes are mutually exclusive.</help:rule>
+    <help:rule xml:id="rule-group-conflict" kind="conflict" option-refs="opt-groups opt-force">A group report cannot be combined with forced group-check bypass.</help:rule>
+    <help:rule xml:id="rule-priors-ml" kind="implies" option-refs="opt-loose-anchors opt-relations opt-white-error opt-draw-error opt-ml">Uncertain priors force maximum-likelihood fitting.</help:rule>
+    <help:rule xml:id="rule-names-after-alias" kind="ordering" option-refs="opt-synonyms opt-include opt-exclude opt-anchor opt-multi-anchors opt-loose-anchors opt-relations">All later name matching uses canonicalized identities.</help:rule>
+    <help:rule xml:id="rule-threshold-display" kind="scope" option-refs="opt-threshold">The game threshold filters final rows only and never removes data from the fit.</help:rule>
+    <help:rule xml:id="rule-sim-count" kind="threshold" option-refs="opt-simulations">Counts 0 and 1 both produce no simulated uncertainty; use at least 2, practically at least about 100.</help:rule>
+    <help:rule xml:id="rule-matrix-simulations" kind="prerequisite" option-refs="opt-error-matrix opt-cfs-matrix opt-simulations">Uncertainty matrices are written only after more than one simulation.</help:rule>
+    <help:rule xml:id="rule-cfs-simulations" kind="prerequisite" option-refs="opt-cfs-show opt-simulations">CFS-next is meaningful only when simulations run.</help:rule>
+    <help:rule xml:id="rule-timelog-stdout" kind="stream" option-refs="opt-timelog opt-output">Timing checkpoints use stdout; route rating text to -o for clean separation.</help:rule>
+    <help:rule xml:id="rule-elostat-paths" kind="filesystem" option-refs="opt-elostat">Elostat output uses three fixed names in the process working directory.</help:rule>
+    <help:rule xml:id="rule-remove-older" kind="dependency" option-refs="opt-remove-older opt-relations">-R derives the players to hide from the second field of -r rows.</help:rule>
+    <help:rule xml:id="rule-output-overwrite" kind="filesystem">Treat every named output as overwrite-oriented and choose paths intentionally.</help:rule>
+  </help:constraints>
+
+  <help:workflows xml:id="workflows">
+    <help:title>Task-oriented recipes</help:title>
+
+    <help:workflow xml:id="workflow-basic" task="rate-one-pool" option-refs="opt-pgn opt-output">
+      <help:title>Rate one clean connected pool</help:title>
+      <help:command><![CDATA[.\ordo-win64.exe -p games.pgn -o ratings.txt]]></help:command>
+      <help:why>Uses the conventional 2300 mean, 202-point scale, zero White advantage, and 50 percent equal-player draw rate.</help:why>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-multiple-inputs" task="merge-and-rate" option-refs="opt-pgn opt-pgn-list opt-positional-input opt-output">
+      <help:title>Rate several PGN sources as one pool</help:title>
+      <help:command><![CDATA[.\ordo-win64.exe -p baseline.pgn -P seasons.txt -- playoff.pgn extra.pgn -o combined.txt]]></help:command>
+      <help:why>Reads baseline first, then each path in seasons.txt, then the positional files.</help:why>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-clean-rate" task="canonicalize-select-rate" option-refs="opt-synonyms opt-include opt-pgn opt-output">
+      <help:title>Normalize identities and select a closed roster</help:title>
+      <help:command><![CDATA[.\ordo-win64.exe -Y aliases.csv -i roster.csv -p games.pgn -o ratings.txt]]></help:command>
+      <help:why>Aliases are resolved first; a game remains only when both canonical names appear in roster.csv.</help:why>
+      <help:see-also><help:xref ref="source-ordoprep-help">Ordoprep XML help</help:xref> for cleaning, filtering, and splitting PGN before this step.</help:see-also>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-anchor" task="anchor" option-refs="opt-anchor opt-average opt-pgn opt-output">
+      <help:title>Fix one known participant</help:title>
+      <help:command><![CDATA[.\ordo-win64.exe -A "Reference Engine" -a 3200 -p games.pgn -o anchored.txt]]></help:command>
+      <help:why>Places the entire connected pool relative to Reference Engine = 3200.</help:why>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-multi-anchor" task="multi-anchor" option-refs="opt-multi-anchors opt-pgn opt-output">
+      <help:title>Use several exact reference ratings</help:title>
+      <help:command><![CDATA[.\ordo-win64.exe -m anchors.csv -p games.pgn -o anchored.txt]]></help:command>
+      <help:warning>Exact anchors can conflict statistically; use loose anchors when outside ratings have uncertainty.</help:warning>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-loose-prior" task="bayesian-prior" option-refs="opt-loose-anchors opt-pgn opt-output">
+      <help:title>Blend uncertain external ratings with the pool</help:title>
+      <help:command><![CDATA[.\ordo-win64.exe -y priors.csv -p games.pgn -o ratings.txt]]></help:command>
+      <help:why>Automatically uses maximum likelihood and Gaussian priors.</help:why>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-version-chain" task="version-relations" option-refs="opt-relations opt-remove-older opt-pgn opt-output">
+      <help:title>Relate engine versions and display only newer ones</help:title>
+      <help:command><![CDATA[.\ordo-win64.exe -r versions.csv -R -p games.pgn -o current.txt]]></help:command>
+      <help:why>Each relation constrains New minus Old; -R hides the second-listed old version from rating rows.</help:why>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-auto-parameters" task="estimate-nuisance-parameters" option-refs="opt-white-auto opt-draw-auto opt-ml opt-pgn opt-output">
+      <help:title>Estimate White advantage and draw tendency</help:title>
+      <help:command><![CDATA[.\ordo-win64.exe -W -D -M -p games.pgn -o modeled.txt]]></help:command>
+      <help:why>Fits color and draw parameters from the same selected pool and reports them after the rating table.</help:why>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-uncertainty" task="simulate-errors" option-refs="opt-simulations opt-cpus opt-confidence opt-output">
+      <help:title>Add 95 percent rating margins</help:title>
+      <help:command><![CDATA[.\ordo-win64.exe -p games.pgn -s 500 -n 4 -F 95 -o ratings-with-errors.txt]]></help:command>
+      <help:why>Runs 500 fitted-pool replays using up to four simulation workers.</help:why>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-pairwise" task="pairwise-uncertainty" option-refs="opt-simulations opt-error-matrix opt-cfs-matrix opt-output">
+      <help:title>Generate pairwise uncertainty and superiority matrices</help:title>
+      <help:command><![CDATA[.\ordo-win64.exe -p games.pgn -s 500 -e margins.txt -C cfs.txt -o ratings.txt]]></help:command>
+      <help:why>The matrix uses pairwise simulated differences, which are more appropriate than combining row errors.</help:why>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-csv" task="structured-output" option-refs="opt-csv opt-columns opt-threshold opt-quiet">
+      <help:title>Create a concise CSV for downstream tooling</help:title>
+      <help:command><![CDATA[.\ordo-win64.exe -q -p games.pgn -c ratings.csv -U 0,1,3,4,5,7,8,9,13,14 -t 20]]></help:command>
+      <help:why>Includes identity, rating, record, opponent count, and diversity; displays players with at least 20 games.</help:why>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-groups" task="diagnose-connectivity" option-refs="opt-groups opt-pgn">
+      <help:title>Diagnose a disconnected pool</help:title>
+      <help:command><![CDATA[.\ordo-win64.exe -p games.pgn -g groups.txt]]></help:command>
+      <help:why>With no explicit -o or -c, writes the group report and exits before rating.</help:why>
+      <help:next-step>Find missing cross-group games, correct split identities with aliases, select one component, or add defensible external constraints.</help:next-step>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-group-and-rate" task="audit-connectivity-and-rate" option-refs="opt-groups opt-output opt-pgn">
+      <help:title>Keep a group audit beside a valid rating report</help:title>
+      <help:command><![CDATA[.\ordo-win64.exe -p connected.pgn -g groups.txt -o ratings.txt]]></help:command>
+      <help:why>Explicit rating output prevents the group-only early exit; the pool must still pass connectivity.</help:why>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-table" task="inspect-scale" option-refs="opt-table opt-scale">
+      <help:title>Inspect the expectancy curve</help:title>
+      <help:command><![CDATA[.\ordo-win64.exe -T -z 202]]></help:command>
+      <help:why>Needs no PGN and makes the meaning of the rating scale concrete.</help:why>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-elostat" task="interoperate" option-refs="opt-elostat opt-pgn">
+      <help:title>Produce Elostat-compatible files safely</help:title>
+      <help:command><![CDATA[New-Item -ItemType Directory -Path .\elostat-out
+Push-Location .\elostat-out
+..\ordo-win64.exe -p ..\games.pgn -E
+Pop-Location]]></help:command>
+      <help:why>Isolates the three fixed output filenames in a dedicated directory.</help:why>
+    </help:workflow>
+  </help:workflows>
+
+  <help:topic xml:id="automation" kind="guide" audience="integrator">
+    <help:title>Automation guidance</help:title>
+    <help:recommendations>
+      <help:item>Use -o and/or -c so rating data is not mixed with progress or --timelog text on stdout.</help:item>
+      <help:item>Add -q for routine batch runs, but treat stderr warnings and nonzero status as diagnostic signals.</help:item>
+      <help:item>Write outputs to distinct paths; verify that simulation-dependent files exist only after using -s greater than one.</help:item>
+      <help:item>Version-control alias, selection, anchor, relation, and column-format inputs with the PGN provenance.</help:item>
+      <help:item>Record Ordo version, scale, anchor policy, White/draw settings, estimator, filters, and simulation count alongside published ratings.</help:item>
+      <help:item>Use CSV for parsing; formatted text widths and headings are designed for people.</help:item>
+    </help:recommendations>
+    <help:reproducibility-record>
+      <help:field>Executable hash and version</help:field>
+      <help:field>Ordered PGN source hashes</help:field>
+      <help:field>All auxiliary file contents and hashes</help:field>
+      <help:field>Complete command line and working directory</help:field>
+      <help:field>All requested output hashes</help:field>
+    </help:reproducibility-record>
+  </help:topic>
+
+  <help:troubleshooting xml:id="troubleshooting">
+    <help:title>Troubleshooting</help:title>
+    <help:problem xml:id="trouble-no-input" symptom="No input files">
+      <help:cause>No -p, -P, or positional PGN source resolved.</help:cause>
+      <help:resolution>Supply at least one PGN file, unless using an informational option or -T.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-result" symptom="Fatal error around a Result tag">
+      <help:cause>The Result value is not one of 1-0, 0-1, 1/2-1/2, =-=, or *.</help:cause>
+      <help:resolution>Normalize the PGN result tag; use * only for games meant to be discarded.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-missing-games" symptom="Expected games or players are absent">
+      <help:cause>Tags may differ in case/layout, the game may lack a complete triple, Result may be *, or include/exclude rules may remove it.</help:cause>
+      <help:resolution>Inspect exact tag lines and canonical names; preprocess unusual PGN with Ordoprep.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-list-fields" symptom="Selection file reports a malformed row">
+      <help:cause>Include/exclude files require exactly one CSV field per nonblank line.</help:cause>
+      <help:resolution>Remove comments and annotation columns; quote a name only when CSV quoting is needed.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-name-not-found" symptom="Anchor, prior, or relation player is not found">
+      <help:cause>The exact case-sensitive canonical name is absent after PGN selection, often because of an alias or filter mismatch.</help:cause>
+      <help:resolution>Check alias output identity and ensure the player retains at least one selected record where required.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-disconnected" symptom="Pool is not well connected">
+      <help:cause>Results contain independent components or a one-way result structure that cannot determine finite relative offsets.</help:cause>
+      <help:resolution>Run -g without -o/-c, inspect groups, correct identities or inputs, and add genuine cross-group evidence. Use -G only with full understanding.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-perfect" symptom="Rating has a greater-than or less-than marker">
+      <help:cause>The participant won every retained game or lost every retained game without a finite external constraint.</help:cause>
+      <help:resolution>Interpret the value as a lower or upper bound, add more varied results, or supply a defensible prior.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-no-error" symptom="ERROR column is absent">
+      <help:cause>No simulations ran; -s 0 and -s 1 both disable simulated uncertainty.</help:cause>
+      <help:resolution>Use -s 100 or more for a stable estimate.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-no-matrix" symptom="Requested error or CFS matrix was not created">
+      <help:cause>Ordo silently skips these files unless the simulation count exceeds one.</help:cause>
+      <help:resolution>Add a practical -s value such as 500 and check the output path again.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-error-comparison" symptom="Pairwise significance inferred from row errors seems inconsistent">
+      <help:cause>Row errors share an anchor or pool reference and are correlated.</help:cause>
+      <help:resolution>Use -e for pairwise difference margins or -C for simulated superiority probabilities.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-threshold" symptom="Increasing -t did not change ratings">
+      <help:cause>-t controls displayed rows only.</help:cause>
+      <help:resolution>Use include/exclude inputs to change fitted data; use -t only for presentation.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-group-only" symptom="-g produced no rating table">
+      <help:cause>Group mode exits after its report unless -o or -c is explicitly supplied.</help:cause>
+      <help:resolution>Add -o ratings.txt or -c ratings.csv if the pool is connected and both outputs are wanted.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-timelog" symptom="Timing lines contaminate stdout ratings">
+      <help:cause>--timelog writes checkpoints to stdout independently of quiet mode.</help:cause>
+      <help:resolution>Route ratings with -o and reserve stdout for timing diagnostics.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-anchor-conflict" symptom="Conflicting anchor options">
+      <help:cause>-m cannot be combined with explicit -a or -A; -y cannot be combined with explicit -a.</help:cause>
+      <help:resolution>Choose one coherent reference policy and remove the conflicting switch.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-white-draw-conflict" symptom="Conflicting White or draw options">
+      <help:cause>Automatic estimation cannot coexist with fixed/prior forms for the same parameter.</help:cause>
+      <help:resolution>Choose -W or -w/-u, and independently choose -D or -d/-k.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-force" symptom="Forced fit is slow, unstable, or implausible">
+      <help:cause>-G bypassed an identifiability check without adding information.</help:cause>
+      <help:resolution>Stop forcing, inspect -g output, and repair or constrain the comparison graph.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-elostat-overwrite" symptom="Existing .dat files changed">
+      <help:cause>-E always targets general.dat, rating.dat, and programs.dat in the current directory.</help:cause>
+      <help:resolution>Run in a dedicated output directory and preserve prior artifacts before rerunning.</help:resolution>
+    </help:problem>
+    <help:problem xml:id="trouble-decimals" symptom="Default decimals differ from the old manual">
+      <help:cause>The verified v1.2.6 executable defaults to -N 1,0, while stale prose describes 0,1.</help:cause>
+      <help:resolution>Specify -N explicitly in reproducible workflows.</help:resolution>
+    </help:problem>
+  </help:troubleshooting>
+
+  <help:glossary xml:id="glossary">
+    <help:title>Glossary</help:title>
+    <help:term xml:id="term-anchor"><help:name>anchor</help:name><help:definition>External information that fixes or constrains the additive rating reference.</help:definition></help:term>
+    <help:term xml:id="term-canonical-name"><help:name>canonical name</help:name><help:definition>The first field of an alias row and the identity used after synonym replacement.</help:definition></help:term>
+    <help:term xml:id="term-cfs"><help:name>CFS</help:name><help:definition>Confidence for superiority: simulated probability that one fitted rating exceeds another.</help:definition></help:term>
+    <help:term xml:id="term-connected"><help:name>well connected</help:name><help:definition>A result graph whose directional evidence jointly identifies finite relative strengths for the ordinary pool.</help:definition></help:term>
+    <help:term xml:id="term-elo"><help:name>Elo-like rating</help:name><help:definition>A scalar strength coordinate whose differences map through a logistic expectancy curve.</help:definition></help:term>
+    <help:term xml:id="term-estimand"><help:name>estimand</help:name><help:definition>The quantity a particular selected dataset and statistical model are intended to estimate.</help:definition></help:term>
+    <help:term xml:id="term-hard-anchor"><help:name>hard anchor</help:name><help:definition>A player rating fixed exactly, with no estimated uncertainty.</help:definition></help:term>
+    <help:term xml:id="term-loose-anchor"><help:name>loose anchor</help:name><help:definition>A Gaussian prior centered on an external rating with a stated standard deviation.</help:definition></help:term>
+    <help:term xml:id="term-maximum-likelihood"><help:name>maximum likelihood</help:name><help:definition>Parameter values that maximize the probability of the observed W/D/L outcomes and any Gaussian priors.</help:definition></help:term>
+    <help:term xml:id="term-opponent-diversity"><help:name>opponent diversity</help:name><help:definition>The exponential Shannon entropy of opponent game shares, interpreted as an effective opponent count.</help:definition></help:term>
+    <help:term xml:id="term-perfect"><help:name>perfect player</help:name><help:definition>An unanchored participant with only wins or only losses in the retained result pool.</help:definition></help:term>
+    <help:term xml:id="term-prior"><help:name>prior</help:name><help:definition>External probabilistic information added to the game likelihood.</help:definition></help:term>
+    <help:term xml:id="term-scale"><help:name>scale</help:name><help:definition>The conversion between rating difference and expected score; distinct from the list's additive reference.</help:definition></help:term>
+    <help:term xml:id="term-standard-error"><help:name>simulated rating error</help:name><help:definition>Rating dispersion under repeated synthetic result pools drawn from Ordo's fitted model.</help:definition></help:term>
+    <help:term xml:id="term-ordo"><help:name>Ordo</help:name><help:definition>The rating and reporting program documented here.</help:definition></help:term>
+    <help:term xml:id="term-ordoprep"><help:name>Ordoprep</help:name><help:definition>A companion program for compacting, selecting, filtering, and partitioning PGN results before rating.</help:definition></help:term>
+  </help:glossary>
+
+  <help:relationship-graph xml:id="relationship-graph" audience="integrator maintainer">
+    <help:title>Cross-topic relationship graph</help:title>
+    <help:relation type="precedes" from-ref="stage-aliases" to-ref="stage-membership"/>
+    <help:relation type="precedes" from-ref="stage-membership" to-ref="stage-groups"/>
+    <help:relation type="precedes" from-ref="stage-perfect" to-ref="stage-fit"/>
+    <help:relation type="precedes" from-ref="stage-fit" to-ref="stage-simulate"/>
+    <help:relation type="precedes" from-ref="stage-simulate" to-ref="stage-report"/>
+    <help:relation type="canonicalizes" from-ref="opt-synonyms" to-ref="term-canonical-name"/>
+    <help:relation type="affects" from-ref="opt-synonyms" to-ref="opt-include"/>
+    <help:relation type="affects" from-ref="opt-synonyms" to-ref="opt-anchor"/>
+    <help:relation type="affects" from-ref="opt-ignore-draws" to-ref="connectivity-check"/>
+    <help:relation type="affects" from-ref="opt-scale" to-ref="logistic-expectancy"/>
+    <help:relation type="sets-reference" from-ref="opt-average" to-ref="additive-reference"/>
+    <help:relation type="sets-reference" from-ref="opt-anchor" to-ref="additive-reference"/>
+    <help:relation type="constrains" from-ref="opt-loose-anchors" to-ref="maximum-likelihood"/>
+    <help:relation type="constrains" from-ref="opt-relations" to-ref="maximum-likelihood"/>
+    <help:relation type="implies" from-ref="opt-loose-anchors" to-ref="opt-ml"/>
+    <help:relation type="implies" from-ref="opt-relations" to-ref="opt-ml"/>
+    <help:relation type="parameterizes" from-ref="opt-white" to-ref="white-model"/>
+    <help:relation type="parameterizes" from-ref="opt-draw" to-ref="draw-model"/>
+    <help:relation type="bypasses" from-ref="opt-force" to-ref="connectivity-check"/>
+    <help:relation type="diagnoses" from-ref="opt-groups" to-ref="connectivity-check"/>
+    <help:relation type="filters-display" from-ref="opt-threshold" to-ref="output-text"/>
+    <help:relation type="filters-display" from-ref="opt-threshold" to-ref="output-csv"/>
+    <help:relation type="produces" from-ref="opt-output" to-ref="output-text"/>
+    <help:relation type="produces" from-ref="opt-csv" to-ref="output-csv"/>
+    <help:relation type="produces" from-ref="opt-groups" to-ref="output-groups"/>
+    <help:relation type="produces" from-ref="opt-error-matrix" to-ref="output-error-matrix"/>
+    <help:relation type="produces" from-ref="opt-cfs-matrix" to-ref="output-cfs-matrix"/>
+    <help:relation type="requires" from-ref="output-error-matrix" to-ref="simulation-method"/>
+    <help:relation type="requires" from-ref="output-cfs-matrix" to-ref="simulation-method"/>
+    <help:relation type="controls" from-ref="opt-confidence" to-ref="confidence-transform"/>
+    <help:relation type="changes-reference" from-ref="opt-pool-relative" to-ref="error-reference"/>
+    <help:relation type="selects" from-ref="opt-columns" to-ref="report-columns"/>
+    <help:relation type="formats" from-ref="opt-decimals" to-ref="formatting-semantics"/>
+    <help:relation type="formats" from-ref="opt-column-format" to-ref="report-columns"/>
+    <help:relation type="explains" from-ref="perfect-players" to-ref="term-perfect"/>
+    <help:relation type="uses" from-ref="workflow-pairwise" to-ref="simulation-method"/>
+    <help:relation type="diagnoses" from-ref="workflow-groups" to-ref="trouble-disconnected"/>
+    <help:relation type="mitigates" from-ref="workflow-elostat" to-ref="trouble-elostat-overwrite"/>
+  </help:relationship-graph>
+
+  <help:index xml:id="index">
+    <help:title>Concept index</help:title>
+    <help:index-entry term="aliases" refs="opt-synonyms alias-format stage-aliases workflow-clean-rate"/>
+    <help:index-entry term="anchors" refs="additive-reference anchor-types opt-anchor opt-multi-anchors opt-loose-anchors"/>
+    <help:index-entry term="CFS" refs="cfs-definition opt-cfs-matrix opt-cfs-show column-6"/>
+    <help:index-entry term="columns" refs="report-columns opt-columns opt-column-format column-format-file"/>
+    <help:index-entry term="connectivity" refs="connectivity connectivity-check opt-groups opt-force workflow-groups trouble-disconnected"/>
+    <help:index-entry term="CSV" refs="output-csv opt-csv workflow-csv alias-format name-list-format"/>
+    <help:index-entry term="draws" refs="draw-model opt-draw opt-draw-error opt-draw-auto opt-ignore-draws"/>
+    <help:index-entry term="errors" refs="uncertainty error-reference confidence-transform opt-error-matrix column-2"/>
+    <help:index-entry term="maximum likelihood" refs="maximum-likelihood opt-ml rule-priors-ml"/>
+    <help:index-entry term="perfect scores" refs="perfect-players term-perfect trouble-perfect"/>
+    <help:index-entry term="PGN" refs="pgn-contract opt-pgn opt-pgn-list opt-positional-input"/>
+    <help:index-entry term="priors" refs="opt-loose-anchors opt-relations loose-anchor-format relation-format term-prior"/>
+    <help:index-entry term="scale" refs="multiplicative-scale logistic-expectancy opt-scale workflow-table"/>
+    <help:index-entry term="simulation" refs="simulation-method opt-simulations opt-cpus workflow-uncertainty"/>
+    <help:index-entry term="threshold" refs="opt-threshold rule-threshold-display trouble-threshold"/>
+    <help:index-entry term="White advantage" refs="white-model opt-white opt-white-error opt-white-auto"/>
+  </help:index>
+
+  <help:sources xml:id="sources">
+    <help:title>Primary evidence and provenance</help:title>
+    <help:source xml:id="source-local-executable" kind="local-binary">
+      <help:title>Local Ordo 1.2.6 Windows executable</help:title>
+      <help:path>D:\dev\proj\ucerl\ordo-win64.exe</help:path>
+      <help:use>Verified version, license, switch spellings, default formatting, conflicts, and representative behavior.</help:use>
+    </help:source>
+    <help:source xml:id="source-ordoprep-help" kind="companion-help" xlink:href="ordoprep-help.xml"><help:title>Ordoprep XML help in this workspace</help:title><help:scope>Complementary preparation, filtering, connectivity, and minimal-PGN workflows.</help:scope></help:source>
+    <help:source xml:id="source-repository" kind="upstream-repository" xlink:href="https://github.com/michiguel/Ordo/tree/v1.2.6"><help:title>Ordo upstream v1.2.6 source tree</help:title></help:source>
+    <help:source xml:id="source-manual" kind="upstream-manual" xlink:href="https://github.com/michiguel/Ordo/blob/v1.2.6/manual.tex"><help:title>Upstream Ordo manual source</help:title><help:scope>Model rationale, formulas, formats, output interpretation, and workflow guidance.</help:scope></help:source>
+    <help:source xml:id="source-main" kind="source-code" xlink:href="https://github.com/michiguel/Ordo/blob/v1.2.6/main.c"><help:title>main.c</help:title><help:scope>Option definitions, defaults, validation, conflicts, pipeline, and output dispatch.</help:scope></help:source>
+    <help:source xml:id="source-pgnget" kind="source-code" xlink:href="https://github.com/michiguel/Ordo/blob/v1.2.6/pgnget.c"><help:title>pgnget.c</help:title><help:scope>PGN scanning, result tokens, lists, aliases, and selection semantics.</help:scope></help:source>
+    <help:source xml:id="source-report" kind="source-code" xlink:href="https://github.com/michiguel/Ordo/blob/v1.2.6/report.c"><help:title>report.c</help:title><help:scope>Text/CSV rows, columns, ranking, perfect markers, thresholds, and auxiliary reports.</help:scope></help:source>
+    <help:source xml:id="source-relprior" kind="source-code" xlink:href="https://github.com/michiguel/Ordo/blob/v1.2.6/relprior.c"><help:title>relprior.c</help:title><help:scope>Hard anchors, loose priors, pairwise relation files, and old-version marking.</help:scope></help:source>
+    <help:source xml:id="source-rating" kind="source-code" xlink:href="https://github.com/michiguel/Ordo/blob/v1.2.6/rating.c"><help:title>rating.c</help:title><help:scope>Default iterative rating calculation and parameter estimation.</help:scope></help:source>
+    <help:source xml:id="source-ratingb" kind="source-code" xlink:href="https://github.com/michiguel/Ordo/blob/v1.2.6/ratingb.c"><help:title>ratingb.c</help:title><help:scope>Maximum-likelihood rating engine and priors.</help:scope></help:source>
+    <help:source xml:id="source-rtngcalc" kind="source-code" xlink:href="https://github.com/michiguel/Ordo/blob/v1.2.6/rtngcalc.c"><help:title>rtngcalc.c</help:title><help:scope>Logistic conversion and rating calculations.</help:scope></help:source>
+    <help:source xml:id="source-sim" kind="source-code" xlink:href="https://github.com/michiguel/Ordo/blob/v1.2.6/sim.c"><help:title>sim.c</help:title><help:scope>Monte Carlo outcome generation and parallel simulations.</help:scope></help:source>
+    <help:source xml:id="source-groups" kind="source-code" xlink:href="https://github.com/michiguel/Ordo/blob/v1.2.6/groups.c"><help:title>groups.c</help:title><help:scope>Group construction, connectivity status, reporting, and ordering.</help:scope></help:source>
+    <help:source xml:id="source-encount" kind="source-code" xlink:href="https://github.com/michiguel/Ordo/blob/v1.2.6/encount.c"><help:title>encount.c</help:title><help:scope>Encounter aggregation and directional connectivity evidence.</help:scope></help:source>
+    <help:source xml:id="source-cegt" kind="source-code" xlink:href="https://github.com/michiguel/Ordo/blob/v1.2.6/cegt.c"><help:title>cegt.c</help:title><help:scope>Elostat-compatible output files.</help:scope></help:source>
+    <help:source xml:id="source-timer" kind="source-code" xlink:href="https://github.com/michiguel/Ordo/blob/v1.2.6/mytimer.c"><help:title>mytimer.c</help:title><help:scope>Timing output stream behavior.</help:scope></help:source>
+    <help:source xml:id="source-license" kind="license" xlink:href="https://github.com/michiguel/Ordo/blob/v1.2.6/LICENSE.txt"><help:title>GNU General Public License text distributed with Ordo</help:title></help:source>
+  </help:sources>
+</help:manual>

@@ -1,0 +1,800 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<help:manual
+    xmlns:help="urn:ucerl:help:1"
+    xmlns:xlink="http://www.w3.org/1999/xlink"
+    xml:id="pgn-extract-help"
+    xml:lang="en"
+    product="pgn-extract"
+    product-version="26-05"
+    document-version="1.0.0">
+
+  <!--
+    Semantic conventions:
+      * Addressable subjects have stable xml:id values.
+      * ref and *-ref contain one internal xml:id.
+      * refs and *-refs contain space-separated internal xml:id values.
+      * option-ref(s), requires-refs, conflicts-with-refs, and typed relations
+        make dependencies navigable instead of leaving them implicit in prose.
+      * evidence-refs connect behavioral claims to primary evidence in <sources>.
+  -->
+
+  <help:metadata xml:id="metadata">
+    <help:title>pgn-extract 26-05: Complete Search, Validation, and Transformation Help</help:title>
+    <help:subtitle>Parse, validate, query, deduplicate, annotate, reshape, and export chess games</help:subtitle>
+    <help:abstract>
+      pgn-extract reads PGN or PGN-like chess scores, reconstructs their positions, validates move legality,
+      combines selection predicates over headers, moves, positions, material, outcomes, and duplicates, then
+      rewrites matched and unmatched games into PGN or alternate representations. This manual documents the
+      exact local Windows build, including its complete switch surface, auxiliary-file grammars, predicate
+      composition, destructive output modes, and option-order dependencies.
+    </help:abstract>
+    <help:document-status>Verified against the local executable and the matching upstream v26-05 source state.</help:document-status>
+    <help:last-verified date="2026-08-10" timezone="America/Chicago"/>
+    <help:local-artifact>
+      <help:path>D:\dev\proj\ucerl\pgn-extract.exe</help:path>
+      <help:sha256>725EB53F49220DC0F2BD624E43120151F5ED0EA7149B9B4A06672DE24798AEF3</help:sha256>
+      <help:reported-version>pgn-extract v26-05</help:reported-version>
+      <help:reported-build-date>Jul 9 2026</help:reported-build-date>
+    </help:local-artifact>
+    <help:upstream-source commit="3d0345b8176c60129374039a623f3db5896e3176" commit-date="2026-06-16" version="v26-05"/>
+    <help:authors>
+      <help:author role="software-author">David J. Barnes</help:author>
+      <help:author role="help-author">OpenAI Codex</help:author>
+    </help:authors>
+    <help:license-summary>
+      The matching distribution is free software under the GNU General Public License as described by its
+      bundled license. Consult <help:xref ref="source-license">the authoritative license file</help:xref>.
+    </help:license-summary>
+    <help:companion-documents>
+      <help:companion xlink:href="ordoprep-help.xml">Ordoprep XML help for rating-oriented result cleanup and connectivity partitioning.</help:companion>
+      <help:companion xlink:href="ordo-help.xml">Ordo XML help for rating and uncertainty analysis.</help:companion>
+    </help:companion-documents>
+  </help:metadata>
+
+  <help:semantic-model xml:id="semantic-model" audience="maintainer integrator">
+    <help:title>How to consume this XML</help:title>
+    <help:description>
+      The hierarchy is a readable manual. Stable IDs, explicit prerequisites, conflicts, stage references,
+      evidence references, and the relationship graph make it a traversable knowledge model suitable for
+      contextual help, search, linting, or UI generation.
+    </help:description>
+    <help:reference-conventions>
+      <help:convention name="single-reference">ref, option-ref, stage-ref, topic-ref, source-ref, and target-ref contain one xml:id.</help:convention>
+      <help:convention name="multiple-references">refs, option-refs, topic-refs, evidence-refs, requires-refs, and conflicts-with-refs contain space-separated xml:id values.</help:convention>
+      <help:convention name="external-reference">xlink:href identifies a local companion or external source, not an internal ID.</help:convention>
+      <help:convention name="authority">Verified local behavior takes precedence over stale or incomplete prose.</help:convention>
+    </help:reference-conventions>
+  </help:semantic-model>
+
+  <help:navigation xml:id="navigation">
+    <help:entry ref="quick-start" label="Quick start"/>
+    <help:entry ref="mental-model" label="Mental model"/>
+    <help:entry ref="command-syntax" label="Syntax and streams"/>
+    <help:entry ref="processing-pipeline" label="Processing pipeline"/>
+    <help:entry ref="input-contract" label="Input contract"/>
+    <help:entry ref="predicate-composition" label="How matching combines"/>
+    <help:entry ref="tag-matching" label="Tag criteria"/>
+    <help:entry ref="position-matching" label="Move and position criteria"/>
+    <help:entry ref="material-matching" label="Material criteria"/>
+    <help:entry ref="duplicate-semantics" label="Duplicates"/>
+    <help:entry ref="validation-repair" label="Validation and repair"/>
+    <help:entry ref="output-contract" label="Outputs and transformations"/>
+    <help:entry ref="option-catalog" label="Complete option catalog"/>
+    <help:entry ref="constraints" label="Conflicts and order dependencies"/>
+    <help:entry ref="workflows" label="Task recipes"/>
+    <help:entry ref="troubleshooting" label="Troubleshooting"/>
+    <help:entry ref="glossary" label="Glossary"/>
+    <help:entry ref="sources" label="Evidence"/>
+  </help:navigation>
+
+  <help:topic xml:id="quick-start" kind="task" audience="all" task="validate-normalize">
+    <help:title>Quick start</help:title>
+    <help:purpose>Validate a PGN file and rewrite valid games into normalized English SAN.</help:purpose>
+    <help:command xml:id="cmd-basic"><![CDATA[.\pgn-extract.exe --quiet --summary --output normalized.pgn games.pgn]]></help:command>
+    <help:result>
+      <help:artifact media-type="application/x-chess-pgn" role="matched-output">normalized.pgn</help:artifact>
+      <help:diagnostics stream="stderr">Errors plus one final matched/processed count.</help:diagnostics>
+    </help:result>
+    <help:caveats>
+      <help:item><help:xref ref="opt-output">--output</help:xref> truncates an existing destination.</help:item>
+      <help:item>Games with move errors are reported but omitted unless <help:xref ref="opt-keepbroken">--keepbroken</help:xref> is used.</help:item>
+      <help:item>With no input paths, pgn-extract reads standard input; with no output option, matched games use standard output.</help:item>
+    </help:caveats>
+    <help:next-steps>
+      <help:xref ref="workflow-player">Select a player</help:xref>
+      <help:xref ref="workflow-deduplicate">Deduplicate a collection</help:xref>
+      <help:xref ref="workflow-position">Find a position</help:xref>
+      <help:xref ref="workflow-ordo">Prepare rating input</help:xref>
+    </help:next-steps>
+  </help:topic>
+
+  <help:topic xml:id="mental-model" kind="concept" audience="all">
+    <help:title>Mental model</help:title>
+    <help:summary>
+      pgn-extract is a chess-aware streaming query and rewrite engine. Unlike a tag-only filter, it applies moves
+      to a board, so it can validate legality and match positions, material, repetitions, endings, and hashes.
+      Unlike a byte-preserving filter, it stores and reformats each game before output.
+    </help:summary>
+    <help:capabilities>
+      <help:capability xml:id="cap-parse" verb="parse" object="PGN-like scores">Accept several algebraic forms, missing headers, comments, NAGs, and variations.</help:capability>
+      <help:capability xml:id="cap-validate" verb="validate" object="game scores">Apply moves, report malformed or illegal input, and optionally retain recoverable broken games.</help:capability>
+      <help:capability xml:id="cap-query" verb="query" object="game properties">Combine header, sequence, position, material, length, outcome, and duplicate predicates.</help:capability>
+      <help:capability xml:id="cap-transform" verb="transform" object="games">Normalize notation, trim moves, alter tags, add derived annotations, and split variations.</help:capability>
+      <help:capability xml:id="cap-route" verb="route" object="matched and unmatched games">Write complementary outputs or partition by game count and ECO.</help:capability>
+      <help:capability xml:id="cap-scale" verb="process" object="large collections">Use in-memory or disk-backed duplicate tables and sequential multi-file input.</help:capability>
+    </help:capabilities>
+    <help:non-goals>
+      <help:item>It does not preserve original whitespace or byte layout; parsed games are rendered anew.</help:item>
+      <help:item>Duplicate recognition is hash-based and is not a cryptographic proof of identity.</help:item>
+      <help:item>It does not provide a general Boolean expression language across selection families; separate families are normally ANDed.</help:item>
+      <help:item>It does not calculate player ratings; use Ordo after extracting the desired result pool.</help:item>
+    </help:non-goals>
+  </help:topic>
+
+  <help:topic xml:id="command-syntax" kind="reference" audience="all">
+    <help:title>Command syntax, arguments, and streams</help:title>
+    <help:syntax><![CDATA[.\pgn-extract.exe [OPTIONS] [PGN_FILE ...]]]></help:syntax>
+    <help:forms>
+      <help:form kind="short-with-value"><![CDATA[-ooutput.pgn  OR  -o output.pgn]]></help:form>
+      <help:form kind="long-with-value"><![CDATA[--output output.pgn]]></help:form>
+      <help:form kind="stdin"><![CDATA[Get-Content games.pgn -Raw | .\pgn-extract.exe --quiet]]></help:form>
+    </help:forms>
+    <help:notes>
+      <help:note>Short options that require values generally accept an attached value or the next token. The special -T criterion must be attached; -e, -F, -h, and -W have optional attached suffixes with option-specific meanings.</help:note>
+      <help:note>Long options that take values consume the following token. Quote values containing spaces or shell metacharacters.</help:note>
+      <help:note>Positional files and files expanded by -f or -A enter one ordered source list as their arguments are processed.</help:note>
+      <help:note>With no sources, stdin is the source. Matched games default to stdout; status and errors default to stderr.</help:note>
+    </help:notes>
+    <help:stream-map>
+      <help:stream name="stdin" role="default-game-input"/>
+      <help:stream name="stdout" role="default-matched-game-output"/>
+      <help:stream name="stderr" role="default-log-status-errors"/>
+    </help:stream-map>
+  </help:topic>
+
+  <help:topic xml:id="processing-pipeline" kind="concept" audience="all">
+    <help:title>Processing pipeline</help:title>
+    <help:stages>
+      <help:stage xml:id="stage-parse-options" ordinal="1" name="parse-options"><help:description>Initialize defaults, process command-line and nested argument files, open explicit outputs, and build input/check-file lists.</help:description></help:stage>
+      <help:stage xml:id="stage-json-adjust" ordinal="2" name="adjust-json"><help:description>When JSON is supported by the selected modes, suppress comments, variations, and terminal result tokens.</help:description></help:stage>
+      <help:stage xml:id="stage-eco-load" ordinal="3" name="load-eco"><help:description>If -e is active, parse the ECO opening book before ordinary sources.</help:description></help:stage>
+      <help:stage xml:id="stage-source-open" ordinal="4" name="open-sources"><help:description>Open check files and normal sources, or stdin if none were supplied.</help:description></help:stage>
+      <help:stage xml:id="stage-parse-game" ordinal="5" name="parse-game"><help:description>Read tags, comments, NAGs, main line, and recursive variations into an internal game.</help:description></help:stage>
+      <help:stage xml:id="stage-tag-prefilter" ordinal="6" name="tag-prefilter"><help:description>Evaluate inexpensive tag criteria before move application; ECO matching waits until classification.</help:description></help:stage>
+      <help:stage xml:id="stage-apply-moves" ordinal="7" name="apply-moves"><help:description>Apply moves to the standard or FEN start, validate legality, and compute positions and derived properties.</help:description></help:stage>
+      <help:stage xml:id="stage-dynamic-match" ordinal="8" name="dynamic-match"><help:description>Evaluate sequences, hashes, positions, material, repetitions, endings, length, and other chess-aware criteria.</help:description></help:stage>
+      <help:stage xml:id="stage-duplicate" ordinal="9" name="duplicate-classification"><help:description>Consult check-game and prior-game hashes when duplicate modes are active.</help:description></help:stage>
+      <help:stage xml:id="stage-route" ordinal="10" name="route"><help:description>Classify the game as matched, unmatched, duplicate, broken, suppressed, or selected by ordinal ranges.</help:description></help:stage>
+      <help:stage xml:id="stage-transform" ordinal="11" name="transform"><help:description>Repair or alter tags, trim moves, split variations, add comments/tags, and select notation.</help:description></help:stage>
+      <help:stage xml:id="stage-render" ordinal="12" name="render"><help:description>Write matched and complementary artifacts, including split and alternate formats.</help:description></help:stage>
+      <help:stage xml:id="stage-summary" ordinal="13" name="summary"><help:description>Close JSON arrays and report counts according to the final verbosity mask.</help:description></help:stage>
+    </help:stages>
+  </help:topic>
+
+  <help:topic xml:id="input-contract" kind="reference" audience="all">
+    <help:title>Input and auxiliary-file contract</help:title>
+    <help:subtopic xml:id="pgn-input">
+      <help:title>PGN and PGN-like game input</help:title>
+      <help:description evidence-refs="source-help source-grammar source-lex source-apply">
+        Input should resemble PGN but movetext may use SAN, long algebraic forms, common separators, selected
+        non-English uppercase piece letters, or lowercase English pieces. Headers and move numbers may be absent.
+        A score must end with <help:code>*</help:code>, <help:code>1-0</help:code>, <help:code>0-1</help:code>,
+        <help:code>1/2-1/2</help:code>, or the accepted shorthand <help:code>1/2</help:code>.
+      </help:description>
+      <help:note>Missing roster tags are synthesized with conventional unknown values during ordinary PGN rendering.</help:note>
+      <help:warning>Lowercase b is first interpreted as a b-pawn move when legal; this can make ambiguous non-SAN input unsafe.</help:warning>
+      <help:note>Chess960 requires an appropriate Variant tag, especially for correct castling encoding in long algebraic output.</help:note>
+    </help:subtopic>
+    <help:subtopic xml:id="source-list-format">
+      <help:title>-f source list</help:title>
+      <help:format>One PGN path per line. Entries are added as normal output-eligible sources.</help:format>
+    </help:subtopic>
+    <help:subtopic xml:id="argument-file-format">
+      <help:title>-A argument file</help:title>
+      <help:format>One command argument or PGN path per line, prefixed immediately by a colon. Lines beginning with percent are comments.</help:format>
+      <help:example><![CDATA[% Select Tal wins and name the output.
+:-t
+White "Tal"
+Result "1-0"
+:-otal-wins.pgn
+:games.pgn]]></help:example>
+      <help:semantics>
+        For -t, -v, -x, -y, -z, and -R, an omitted filename makes following non-colon lines inline data until
+        the next colon argument. Argument files may include other -A files; cycles are not detected.
+      </help:semantics>
+    </help:subtopic>
+    <help:subtopic xml:id="check-file-format">
+      <help:title>-c check-file dispatch</help:title>
+      <help:semantics>A case-insensitive .pgn suffix denotes one PGN check source; any other suffix denotes a one-path-per-line list of check sources.</help:semantics>
+      <help:note>Check games seed duplicate detection but are never ordinary output candidates.</help:note>
+    </help:subtopic>
+    <help:subtopic xml:id="roster-file-format">
+      <help:title>-R tag roster</help:title>
+      <help:format>One tag name per line; a leading percent marks a comment.</help:format>
+      <help:semantics>Listed tags are emitted first in that order. Unlisted tags follow unless --xroster suppresses them.</help:semantics>
+    </help:subtopic>
+    <help:subtopic xml:id="player-info-format">
+      <help:title>Elo and FIDE ID lookup files</help:title>
+      <help:format>Exactly two tab-separated fields per useful row: exact player name, then rating or identifier.</help:format>
+      <help:semantics>Lookup is exact and case-sensitive. Matching WhiteElo/BlackElo or WhiteFideID/BlackFideId tags are added or replaced.</help:semantics>
+    </help:subtopic>
+  </help:topic>
+
+  <help:topic xml:id="predicate-composition" kind="concept" audience="all">
+    <help:title>How selection predicates combine</help:title>
+    <help:summary evidence-refs="source-help source-apply">
+      Think of each enabled selection family as a gate. A game normally must pass every enabled family: tag,
+      textual sequence, positional sequence/pattern/hash, material, move count, outcome, setup, rating relation,
+      comments, duplicate policy, and ordinal selection. This is logical AND across families.
+    </help:summary>
+    <help:rules>
+      <help:rule xml:id="rule-and-families">Different tag names and different selection families are ANDed.</help:rule>
+      <help:rule xml:id="rule-or-tag-values">Multiple textual criteria for the same tag name are ORed.</help:rule>
+      <help:rule xml:id="rule-and-relations">Multiple relational criteria for one numeric tag are ANDed, enabling closed ranges.</help:rule>
+      <help:rule xml:id="rule-eco-late">All tag criteria except ECO can reject before move processing; ECO is evaluated after optional classification.</help:rule>
+      <help:rule xml:id="rule-no-cross-or">To express OR across unrelated families, normally run separate commands and then merge/deduplicate the results.</help:rule>
+      <help:rule xml:id="rule-match-ordinal">--selectonly, --skipmatching, and --stopafter count matching games, not raw input-game numbers.</help:rule>
+    </help:rules>
+  </help:topic>
+
+  <help:topic xml:id="tag-matching" kind="reference" audience="all">
+    <help:title>Tag matching with -t and -T</help:title>
+    <help:subtopic xml:id="tag-file-grammar">
+      <help:title>Preferred -t grammar</help:title>
+      <help:format><![CDATA[TagName [operator] "value"]]></help:format>
+      <help:operators>
+        <help:operator token="(none)">Textual prefix match; --tagsubstr changes it to substring matching.</help:operator>
+        <help:operator token="=">Numeric/date equality where supported.</help:operator>
+        <help:operator token="&lt;&gt;">Inequality; a missing tag passes if all criteria for that tag are inequalities.</help:operator>
+        <help:operator token="&lt; &lt;= &gt; &gt;=">Relational comparison for Date, Elo, TimeControl's first descriptor, and wholly numeric tag values.</help:operator>
+        <help:operator token="=~">Regular expression comparison for ordinary textual tags, excluding Date, Elo, and TimeControl.</help:operator>
+      </help:operators>
+      <help:pseudo-tags>
+        <help:pseudo-tag name="Player">White OR Black textual match.</help:pseudo-tag>
+        <help:pseudo-tag name="Elo">WhiteElo OR BlackElo relational match.</help:pseudo-tag>
+        <help:pseudo-tag name="EloDiff">Relational match on the absolute WhiteElo/BlackElo difference.</help:pseudo-tag>
+        <help:pseudo-tag name="FEN">Search positions reached; board equality ignores castling rights and, unless constrained, side to move.</help:pseudo-tag>
+        <help:pseudo-tag name="FENPattern">Search a fuzzy board pattern as written.</help:pseudo-tag>
+        <help:pseudo-tag name="FENPatternI">Search the pattern as written and with colors inverted.</help:pseudo-tag>
+      </help:pseudo-tags>
+      <help:example><![CDATA[% Tal games in 1960-1962 with both ratings at least 2500.
+Player "Tal"
+Date >= "1960.01.01"
+Date <= "1962.12.31"
+WhiteElo >= "2500"
+BlackElo >= "2500"]]></help:example>
+    </help:subtopic>
+    <help:subtopic xml:id="tag-cli-grammar">
+      <help:title>Compact -T grammar</help:title>
+      <help:format><![CDATA[-T{a|b|d|e|f|h|p|r|w}VALUE]]></help:format>
+      <help:mapping>
+        <help:item code="a">Annotator</help:item><help:item code="b">Black</help:item><help:item code="d">Date</help:item>
+        <help:item code="e">ECO</help:item><help:item code="f">FEN pattern</help:item><help:item code="h">HashCode tag</help:item>
+        <help:item code="p">Player, either color</help:item><help:item code="r">Result</help:item><help:item code="w">White</help:item>
+      </help:mapping>
+      <help:note>Date values may be prefixed with b or a for before or after. -t is more expressive and less shell-fragile.</help:note>
+    </help:subtopic>
+    <help:subtopic xml:id="fen-pattern-grammar">
+      <help:title>FEN-pattern board grammar</help:title>
+      <help:metacharacters>
+        <help:metacharacter token="?">Any one square, empty or occupied.</help:metacharacter>
+        <help:metacharacter token="!">Any occupied square.</help:metacharacter>
+        <help:metacharacter token="A">Any White piece.</help:metacharacter>
+        <help:metacharacter token="a">Any Black piece.</help:metacharacter>
+        <help:metacharacter token="*">Zero or more squares.</help:metacharacter>
+        <help:metacharacter token="[xyz]">Any listed case-sensitive piece or A/a class.</help:metacharacter>
+        <help:metacharacter token="[^xyz]">Any piece not listed.</help:metacharacter>
+      </help:metacharacters>
+      <help:note>Supply only eight slash-separated board ranks. Labels may follow patterns in -t files and become MatchLabel tags with --addlabeltag.</help:note>
+    </help:subtopic>
+  </help:topic>
+
+  <help:topic xml:id="position-matching" kind="reference" audience="all">
+    <help:title>Move-sequence, hash, and position matching</help:title>
+    <help:comparison>
+      <help:method xml:id="method-textual" option-ref="opt-textual-variations">
+        <help:name>Textual sequence (-v)</help:name>
+        <help:semantics>Matches move text, normally from game start. It does not automatically recognize true transpositions.</help:semantics>
+        <help:syntax>* matches any move; !MOVE disallows a move; vertical bar separates alternatives. By default, move-order permutations are tried.</help:syntax>
+        <help:controls refs="opt-vanywhere opt-no-permutations">--vanywhere searches throughout; -P enforces listed order.</help:controls>
+      </help:method>
+      <help:method xml:id="method-positional" option-ref="opt-position-variations">
+        <help:name>Positional sequence (-x)</help:name>
+        <help:semantics>Applies a complete line and matches games reaching the same final board hash, regardless of transposition.</help:semantics>
+        <help:note>Search depth is automatically limited near the longest supplied sequence.</help:note>
+      </help:method>
+      <help:method xml:id="method-hash" option-ref="opt-hash-match">
+        <help:name>Polyglot hash (-H)</help:name>
+        <help:semantics>Matches occurrence of the supplied hexadecimal Polyglot position hash.</help:semantics>
+      </help:method>
+      <help:method xml:id="method-fen" option-ref="opt-fenpattern">
+        <help:name>FEN/FENPattern</help:name>
+        <help:semantics>Matches a complete or wildcard board description via -t, -Tf, --fenpattern, or --fenpatterni.</help:semantics>
+      </help:method>
+    </help:comparison>
+    <help:common-controls>
+      <help:xref ref="opt-matchplylimit">Limit how deeply positional/hash matches are attempted</help:xref>
+      <help:xref ref="opt-startply">Delay match attempts until a given ply</help:xref>
+      <help:xref ref="opt-wtm">Require White to move</help:xref>
+      <help:xref ref="opt-btm">Require Black to move</help:xref>
+      <help:xref ref="opt-markmatches">Mark the matching move</help:xref>
+    </help:common-controls>
+  </help:topic>
+
+  <help:topic xml:id="material-matching" kind="reference" audience="advanced">
+    <help:title>Material and piece-count matching</help:title>
+    <help:description>
+      -y/--materialy interprets the left material set as White only. -z/--materialz checks the pattern in both
+      color orientations. A file contains one pattern per line; long forms accept one quoted pattern. A leading
+      stability number is the required half-move duration and defaults to 2.
+    </help:description>
+    <help:format><![CDATA[[stability] pieces1 pieces2]]></help:format>
+    <help:tokens>
+      <help:token token="K Q R B N P">Piece types; case and order are immaterial. K is normally omitted.</help:token>
+      <help:token token="L">Minor piece: bishop or knight.</help:token>
+      <help:token token="*">Zero or more occurrences of the preceding piece.</help:token>
+      <help:token token="+">One or more.</help:token>
+      <help:token token="d, d+, d-">Exactly d, at least d, or at most d.</help:token>
+      <help:token token="=, #, &gt;, &lt;">Same, different, more, or fewer than the opponent's count.</help:token>
+      <help:token token="d&gt;, d&lt;">At least d more or fewer than the opponent.</help:token>
+      <help:token token="d&gt;=, d&lt;=">Exactly d more or fewer than the opponent.</help:token>
+    </help:tokens>
+    <help:example><![CDATA[10 R2P+ R=P*]]></help:example>
+    <help:note>--piececount is simpler when only the total number of pieces matters. --addmatchtag and --markmatches expose where or which orientation matched.</help:note>
+  </help:topic>
+
+  <help:topic xml:id="duplicate-semantics" kind="concept" audience="all">
+    <help:title>Duplicate detection and routing</help:title>
+    <help:description evidence-refs="source-help source-hashing source-main">
+      Ordinary duplicates combine an end-position board hash with a cumulative move-sequence hash. The first
+      occurrence is the original; later occurrences are duplicates. Tags, comments, NAGs, and variations do not
+      define identity, so an annotated later copy can be classified as a duplicate of a plainer first copy.
+    </help:description>
+    <help:modes>
+      <help:mode option-ref="opt-duplicates">Write second and later copies to a separate, overwritten duplicates file.</help:mode>
+      <help:mode option-ref="opt-no-duplicates">Suppress duplicate copies from matched output.</help:mode>
+      <help:mode option-ref="opt-no-unique">Suppress originals; commonly combine with -d to isolate repeated games.</help:mode>
+      <help:mode option-ref="opt-checkfile">Seed the duplicate table with non-output check games.</help:mode>
+      <help:mode option-ref="opt-fuzzydepth">Compare board position at a chosen ply, or at the end with 0, without move-sequence identity; castling and en-passant rights are ignored.</help:mode>
+      <help:mode option-ref="opt-delete-same-setup">Suppress later games with the same starting position, regardless of moves.</help:mode>
+      <help:mode option-ref="opt-virtual">Use virtual.tmp as an external table at roughly 16 bytes per game.</help:mode>
+    </help:modes>
+    <help:warning>Hash matching can theoretically collide. Review duplicate output before curating an archival master.</help:warning>
+  </help:topic>
+
+  <help:topic xml:id="validation-repair" kind="concept" audience="all">
+    <help:title>Validation, recovery, and repair</help:title>
+    <help:default>Errors are logged; a broken game is normally not output.</help:default>
+    <help:behaviors>
+      <help:behavior option-ref="opt-report-only">-r validates and reports without emitting matched games.</help:behavior>
+      <help:behavior option-ref="opt-keepbroken">--keepbroken retains the valid prefix and comments out text from the detected error onward.</help:behavior>
+      <help:behavior option-ref="opt-allow-null">--allownullmoves accepts -- in a main line without warning.</help:behavior>
+      <help:behavior option-ref="opt-fix-result">--fixresulttags corrects clear conflicts using checkmate, stalemate, insufficient material, or a terminating *.</help:behavior>
+      <help:behavior option-ref="opt-no-bad-results">--nobadresults rejects unresolved Result-tag versus terminator inconsistency.</help:behavior>
+      <help:behavior option-ref="opt-fix-tag-strings">--fixtagstrings attempts to repair unescaped or unterminated tag quotes.</help:behavior>
+      <help:behavior option-ref="opt-nested-comments">--nestedcomments tolerates nested braces from nonstandard sources.</help:behavior>
+      <help:behavior option-ref="opt-add-fen-castling">--addfencastling infers missing conventional castling rights from king/rook placement; not Chess960.</help:behavior>
+    </help:behaviors>
+  </help:topic>
+
+  <help:topic xml:id="output-contract" kind="reference" audience="all">
+    <help:title>Output, routing, and transformations</help:title>
+    <help:subtopic xml:id="matched-unmatched-routing">
+      <help:title>Matched and unmatched routes</help:title>
+      <help:description>Matched valid games use stdout or -o/-a. -n writes valid games not otherwise output; the literal filename stdout selects stdout. --suppressmatched can leave only the complementary -n stream.</help:description>
+    </help:subtopic>
+    <help:subtopic xml:id="overwrite-map">
+      <help:title>Overwrite and append map</help:title>
+      <help:artifact option-ref="opt-output" policy="truncate">Named matched output.</help:artifact>
+      <help:artifact option-ref="opt-append" policy="append">Named matched output.</help:artifact>
+      <help:artifact option-ref="opt-nonmatching" policy="truncate">Nonmatching output, unless literal stdout.</help:artifact>
+      <help:artifact option-ref="opt-duplicates" policy="truncate">Duplicate-copy output.</help:artifact>
+      <help:artifact option-ref="opt-split-count" policy="truncate">Numbered N.pgn files.</help:artifact>
+      <help:artifact option-ref="opt-eco-split" policy="append">ECO-named files and noeco.pgn.</help:artifact>
+      <help:artifact option-ref="opt-log-overwrite" policy="truncate">Diagnostic log.</help:artifact>
+      <help:artifact option-ref="opt-log-append" policy="append">Diagnostic log.</help:artifact>
+      <help:artifact option-ref="opt-virtual" policy="temporary-fixed-name">virtual.tmp in the working directory.</help:artifact>
+    </help:subtopic>
+    <help:subtopic xml:id="notation-formats">
+      <help:title>Move and record formats</help:title>
+      <help:format name="SAN" selector="default or -Wsan">Normalized English SAN; six-letter piece alphabet suffixes select another single-character language.</help:format>
+      <help:format name="input" selector="-W">Preserve the input move spelling where possible; validity of rewritten PGN is not guaranteed.</help:format>
+      <help:format name="halg" selector="-Whalg">Hyphenated long algebraic.</help:format>
+      <help:format name="lalg" selector="-Wlalg">Long algebraic.</help:format>
+      <help:format name="elalg" selector="-Welalg">Enhanced long algebraic.</help:format>
+      <help:format name="xlalg" selector="-Wxlalg">Enhanced long algebraic with - and x.</help:format>
+      <help:format name="xolalg" selector="-Wxolalg">xlalg with O-O/O-O-O castling.</help:format>
+      <help:format name="uci" selector="-Wuci">Long algebraic plus no comments, NAGs, variations, move numbers, or check markers; very wide lines.</help:format>
+      <help:format name="epd" selector="-Wepd">One EPD record per position with c0/c1 metadata; not PGN.</help:format>
+      <help:format name="fen" selector="-Wfen">Tags plus a sequence of FEN positions, no game result; not PGN.</help:format>
+      <help:format name="cm" selector="-Wcm">Legacy ChessMaster-style output.</help:format>
+      <help:format name="json" selector="--json">JSON array of game objects containing tag properties and a Moves array.</help:format>
+    </help:subtopic>
+    <help:subtopic xml:id="json-semantics">
+      <help:title>JSON qualifications</help:title>
+      <help:description evidence-refs="source-main source-output">
+        In the supported ordinary mode, --json disables comments, variations, and terminating result tokens while
+        retaining header properties and structured moves. It is not supported with -E, -Wepd, or -Wcm; v26-05 logs
+        that combination and falls back from JSON. Treat no-match output cautiously because it may be empty rather than an empty array.
+      </help:description>
+    </help:subtopic>
+    <help:subtopic xml:id="derived-annotations">
+      <help:title>Derived tags and comments</help:title>
+      <help:description>pgn-extract can add ECO metadata, hashes, ply counts, player ratings/IDs, match labels, material orientation, FEN/hash/evaluation comments, and input line provenance. These derived fields are calculated after parsing and may replace existing tags of the same purpose.</help:description>
+    </help:subtopic>
+  </help:topic>
+
+  <help:option-catalog xml:id="option-catalog">
+    <help:title>Complete option catalog</help:title>
+
+    <help:category xml:id="category-info" name="Information, logging, and control">
+      <help:option xml:id="opt-help" short="-h" long="--help" aliases="-?" argument="optional-attached"><help:summary>Print detailed switch help and exit with status 1 in this build.</help:summary><help:note>-? is accepted although omitted from the local built-in list.</help:note></help:option>
+      <help:option xml:id="opt-version" long="--version" argument="none"><help:summary>Print the version and exit success.</help:summary></help:option>
+      <help:option xml:id="opt-report-only" short="-r" argument="none"><help:summary>Report errors without extracting matched games.</help:summary></help:option>
+      <help:option xml:id="opt-log-overwrite" short="-l" argument="FILE"><help:summary>Write diagnostics to a new/truncated logfile instead of stderr.</help:summary></help:option>
+      <help:option xml:id="opt-log-append" short="-L" argument="FILE"><help:summary>Append diagnostics to a logfile instead of stderr.</help:summary></help:option>
+      <help:option xml:id="opt-silent" short="-s" argument="none"><help:summary>Suppress per-game log summaries and final count but retain the running modulo-1000 counter on stderr.</help:summary></help:option>
+      <help:option xml:id="opt-quiet" long="--quiet" argument="none"><help:summary>Suppress processing status and the final count.</help:summary></help:option>
+      <help:option xml:id="opt-summary" long="--summary" argument="none"><help:summary>Enable the final matched/processed count.</help:summary><help:ordering>Place after -s or --quiet to restore the summary.</help:ordering></help:option>
+    </help:category>
+
+    <help:category xml:id="category-input" name="Sources and argument composition">
+      <help:option xml:id="opt-arguments-file" short="-A" argument="FILE"><help:summary>Read arguments and optional inline criteria from a colon-prefixed argument file.</help:summary><help:format-ref ref="argument-file-format"/></help:option>
+      <help:option xml:id="opt-file-list" short="-f" argument="FILE"><help:summary>Add PGN source paths listed one per line.</help:summary><help:format-ref ref="source-list-format"/></help:option>
+      <help:option xml:id="opt-positional-input" spelling="PGN_FILE" argument="PATH" repeatable="true"><help:summary>Add a normal PGN source; stdin is used when the final source list is empty.</help:summary></help:option>
+      <help:option xml:id="opt-allow-null" long="--allownullmoves" argument="none"><help:summary>Allow null moves in the main line without warning.</help:summary></help:option>
+      <help:option xml:id="opt-nested-comments" long="--nestedcomments" argument="none"><help:summary>Tolerate nested brace comments.</help:summary></help:option>
+    </help:category>
+
+    <help:category xml:id="category-tag-selection" name="Tag and metadata selection">
+      <help:option xml:id="opt-tag-file" short="-t" argument="FILE"><help:summary>Load flexible textual, relational, regex, FEN, and FEN-pattern criteria.</help:summary><help:xref ref="tag-file-grammar">Criteria grammar</help:xref></help:option>
+      <help:option xml:id="opt-tag-command" short="-T" argument="CRITERION"><help:summary>Add one compact attached command-line tag criterion.</help:summary><help:xref ref="tag-cli-grammar">Compact grammar</help:xref></help:option>
+      <help:option xml:id="opt-tagsubstr" long="--tagsubstr" argument="none"><help:summary>Change ordinary textual tag criteria from prefix to substring matching.</help:summary><help:ordering>Set before loading the criteria it should affect.</help:ordering></help:option>
+      <help:option xml:id="opt-soundex" short="-S" argument="none"><help:summary>Use simple Soundex matching for White, Black, Site, Event, and Annotator criteria.</help:summary><help:ordering>Must precede -t and -T.</help:ordering></help:option>
+      <help:option xml:id="opt-only-setup" long="--onlysetuptags" argument="none" conflicts-with-refs="opt-no-setup"><help:summary>Match only games having a SetUp tag.</help:summary></help:option>
+      <help:option xml:id="opt-no-setup" long="--nosetuptags" argument="none" conflicts-with-refs="opt-only-setup"><help:summary>Reject games having a SetUp tag.</help:summary></help:option>
+      <help:option xml:id="opt-higher-winner" long="--higherratedwinner" argument="none" conflicts-with-refs="opt-lower-winner"><help:summary>Match decisive games where both Elo tags exist and the winner is higher rated.</help:summary></help:option>
+      <help:option xml:id="opt-lower-winner" long="--lowerratedwinner" argument="none" conflicts-with-refs="opt-higher-winner"><help:summary>Match decisive games where both Elo tags exist and the winner is lower rated.</help:summary></help:option>
+      <help:option xml:id="opt-commented" long="--commented" argument="none" conflicts-with-refs="opt-no-comments"><help:summary>Match only games containing at least one comment.</help:summary></help:option>
+    </help:category>
+
+    <help:category xml:id="category-position" name="Move, position, material, and outcome selection">
+      <help:option xml:id="opt-textual-variations" short="-v" argument="FILE"><help:summary>Match textual move sequences from a one-sequence-per-line file.</help:summary></help:option>
+      <help:option xml:id="opt-vanywhere" long="--vanywhere" argument="none" requires-refs="opt-textual-variations"><help:summary>Search -v textual sequences throughout each game rather than only at the start.</help:summary></help:option>
+      <help:option xml:id="opt-no-permutations" short="-P" argument="none" requires-refs="opt-textual-variations"><help:summary>Match -v sequences only in listed move order, without permutation trials.</help:summary></help:option>
+      <help:option xml:id="opt-position-variations" short="-x" argument="FILE"><help:summary>Match games reaching end positions of supplied move sequences.</help:summary></help:option>
+      <help:option xml:id="opt-hash-match" short="-H" argument="HEX"><help:summary>Match games in which a supplied hexadecimal Polyglot hash occurs.</help:summary></help:option>
+      <help:option xml:id="opt-fenpattern" long="--fenpattern" argument="PATTERN" repeatable="true"><help:summary>Match games reaching a board matching a FEN pattern.</help:summary></help:option>
+      <help:option xml:id="opt-fenpatterni" long="--fenpatterni" argument="PATTERN" repeatable="true"><help:summary>Match the FEN pattern as written or with colors inverted.</help:summary></help:option>
+      <help:option xml:id="opt-matchplylimit" long="--matchplylimit" argument="N"><help:summary>Limit the ply depth searched for positional, hash, or FEN-pattern matches.</help:summary><help:range>N must be positive and not below an already established positional search depth.</help:range></help:option>
+      <help:option xml:id="opt-startply" long="--startply" argument="N"><help:summary>Do not attempt dynamic matches before ply N.</help:summary><help:range>N must be at least 1.</help:range></help:option>
+      <help:option xml:id="opt-wtm" long="--wtm" argument="none" conflicts-with-refs="opt-btm"><help:summary>Require White to move at a position match.</help:summary></help:option>
+      <help:option xml:id="opt-btm" long="--btm" argument="none" conflicts-with-refs="opt-wtm"><help:summary>Require Black to move at a position match.</help:summary></help:option>
+      <help:option xml:id="opt-material-white" short="-y" argument="FILE"><help:summary>Match material patterns with pieces1 assigned to White.</help:summary><help:xref ref="material-matching">Pattern grammar</help:xref></help:option>
+      <help:option xml:id="opt-material-either" short="-z" argument="FILE"><help:summary>Match material patterns in either color orientation.</help:summary><help:xref ref="material-matching">Pattern grammar</help:xref></help:option>
+      <help:option xml:id="opt-materialy" long="--materialy" argument="PATTERN"><help:summary>Add one White-oriented material pattern directly.</help:summary></help:option>
+      <help:option xml:id="opt-materialz" long="--materialz" argument="PATTERN"><help:summary>Add one either-color material pattern directly.</help:summary></help:option>
+      <help:option xml:id="opt-piececount" long="--piececount" argument="N"><help:summary>Match games reaching exactly N total pieces, including kings.</help:summary><help:range>N must be at least 2.</help:range></help:option>
+      <help:option xml:id="opt-checkmate" short="-M" long="--checkmate" argument="none" conflicts-with-refs="opt-stalemate opt-insufficient"><help:summary>Match only games ending in checkmate.</help:summary></help:option>
+      <help:option xml:id="opt-stalemate" long="--stalemate" argument="none" conflicts-with-refs="opt-checkmate opt-insufficient"><help:summary>Match only games ending in stalemate.</help:summary></help:option>
+      <help:option xml:id="opt-insufficient" long="--insufficient" argument="none" conflicts-with-refs="opt-checkmate opt-stalemate"><help:summary>Match only games ending with insufficient mating material.</help:summary></help:option>
+      <help:option xml:id="opt-underpromotion" long="--underpromotion" argument="none"><help:summary>Match games containing an underpromotion.</help:summary></help:option>
+      <help:option xml:id="opt-fifty" long="--fifty" aliases="--50" argument="none" conflicts-with-refs="opt-seventyfive"><help:summary>Match games containing 50 moves without a pawn move or capture.</help:summary></help:option>
+      <help:option xml:id="opt-seventyfive" long="--seventyfive" aliases="--75" argument="none" conflicts-with-refs="opt-fifty"><help:summary>Match games containing 75 moves without a pawn move or capture.</help:summary></help:option>
+      <help:option xml:id="opt-repetition" long="--repetition" argument="none" conflicts-with-refs="opt-repetition5"><help:summary>Match occurrence of threefold repetition, whether or not it ends the game.</help:summary></help:option>
+      <help:option xml:id="opt-repetition5" long="--repetition5" argument="none" conflicts-with-refs="opt-repetition"><help:summary>Match occurrence of fivefold repetition.</help:summary></help:option>
+      <help:option xml:id="opt-odds" long="--odds" argument="none"><help:summary>Match recognizable material-odds games from move-1 FEN starts.</help:summary></help:option>
+    </help:category>
+
+    <help:category xml:id="category-bounds" name="Input and match ordinals, length bounds, and truncation">
+      <help:option xml:id="opt-move-bounds" short="-b" argument="[elu]N"><help:summary>Require exactly, at least, or at most N full moves.</help:summary></help:option>
+      <help:option xml:id="opt-ply-bounds" short="-p" argument="[elu]N"><help:summary>Require exactly, at least, or at most N plies.</help:summary></help:option>
+      <help:option xml:id="opt-minmoves" long="--minmoves" argument="N"><help:summary>Require at least N full moves.</help:summary></help:option>
+      <help:option xml:id="opt-maxmoves" long="--maxmoves" argument="N"><help:summary>Require at most N full moves.</help:summary></help:option>
+      <help:option xml:id="opt-minply" long="--minply" argument="N"><help:summary>Require at least N plies.</help:summary></help:option>
+      <help:option xml:id="opt-maxply" long="--maxply" argument="N"><help:summary>Require at most N plies.</help:summary></help:option>
+      <help:option xml:id="opt-firstgame" long="--firstgame" argument="N"><help:summary>Start matching at input game N.</help:summary><help:range>N is at least 1 and may not exceed --gamelimit.</help:range></help:option>
+      <help:option xml:id="opt-gamelimit" long="--gamelimit" argument="N"><help:summary>Analyze only input games through N.</help:summary><help:range>N must not precede --firstgame.</help:range></help:option>
+      <help:option xml:id="opt-stopafter" long="--stopafter" argument="N"><help:summary>Stop after N matches.</help:summary><help:range>N must be positive.</help:range></help:option>
+      <help:option xml:id="opt-selectonly" long="--selectonly" argument="RANGES"><help:summary>Output only specified match ordinals, then terminate after the last requested range.</help:summary></help:option>
+      <help:option xml:id="opt-skipmatching" long="--skipmatching" argument="RANGES"><help:summary>Suppress specified match ordinals.</help:summary></help:option>
+      <help:option xml:id="opt-plylimit" long="--plylimit" argument="N"><help:summary>Render at most N plies; use * if the truncated game has not ended.</help:summary><help:range>N is nonnegative.</help:range></help:option>
+      <help:option xml:id="opt-quiescent" long="--quiescent" argument="N" requires-refs="opt-plylimit"><help:summary>After a ply limit, continue until N plies without capture, check, or promotion.</help:summary></help:option>
+      <help:option xml:id="opt-dropply" long="--dropply" argument="N"><help:summary>Drop N opening plies if positive; if negative, retain only the final |N| plies and emit a revised FEN start.</help:summary></help:option>
+      <help:option xml:id="opt-dropbefore" long="--dropbefore" argument="TEXT"><help:summary>Drop opening plies before an exactly matching comment and emit a revised FEN start.</help:summary></help:option>
+    </help:category>
+
+    <help:category xml:id="category-duplicates" name="Duplicate detection">
+      <help:option xml:id="opt-duplicates" short="-d" long="--duplicates" argument="FILE" conflicts-with-refs="opt-no-duplicates"><help:summary>Write second and later copies to a truncated duplicate file.</help:summary></help:option>
+      <help:option xml:id="opt-no-duplicates" short="-D" long="--noduplicates" argument="none" conflicts-with-refs="opt-duplicates"><help:summary>Suppress duplicate copies from normal output.</help:summary></help:option>
+      <help:option xml:id="opt-no-unique" short="-U" long="--nounique" argument="none"><help:summary>Suppress first/original occurrences.</help:summary></help:option>
+      <help:option xml:id="opt-checkfile" short="-c" long="--checkfile" argument="FILE"><help:summary>Seed duplicate detection from one .pgn file or a list of PGN files.</help:summary><help:format-ref ref="check-file-format"/></help:option>
+      <help:option xml:id="opt-fuzzydepth" long="--fuzzydepth" argument="PLY"><help:summary>Use board-position duplicate identity at PLY, or at game end when 0.</help:summary></help:option>
+      <help:option xml:id="opt-delete-same-setup" long="--deletesamesetup" argument="none"><help:summary>Suppress later games sharing an initial position.</help:summary></help:option>
+      <help:option xml:id="opt-virtual" short="-Z" argument="none"><help:summary>Use virtual.tmp for a disk-backed duplicate table.</help:summary></help:option>
+    </help:category>
+
+    <help:category xml:id="category-eco" name="ECO classification and split output">
+      <help:option xml:id="opt-eco" short="-e" argument="optional-attached-file"><help:summary>Classify openings from an ECO PGN and add/replace ECO, Opening, Variation, and SubVariation tags.</help:summary><help:default>eco.pgn in the working directory, or ECO_FILE environment variable.</help:default></help:option>
+      <help:option xml:id="opt-eco-split" short="-E" argument="LEVEL"><help:summary>Append games to files named from LEVEL ECO characters; malformed/missing ECO uses noeco.pgn.</help:summary><help:warning>Can create many files and conflicts with named or count-split output.</help:warning></help:option>
+      <help:option xml:id="opt-split-count" short="-#" argument="N[,FIRST]"><help:summary>Write at most N games per truncated numbered file, starting with 1.pgn or FIRST.pgn.</help:summary></help:option>
+    </help:category>
+
+    <help:category xml:id="category-routing" name="Output routing and serialization">
+      <help:option xml:id="opt-output" short="-o" long="--output" argument="FILE"><help:summary>Write matched games to a truncated file rather than stdout.</help:summary></help:option>
+      <help:option xml:id="opt-append" short="-a" long="--append" argument="FILE"><help:summary>Append matched games to a file.</help:summary></help:option>
+      <help:option xml:id="opt-nonmatching" short="-n" argument="FILE"><help:summary>Write valid games not otherwise output to a truncated file; literal stdout selects stdout.</help:summary></help:option>
+      <help:option xml:id="opt-suppressmatched" long="--suppressmatched" argument="none"><help:summary>Suppress the normal matched stream, commonly to output only -n's complement.</help:summary></help:option>
+      <help:option xml:id="opt-json" long="--json" argument="none"><help:summary>Serialize supported ordinary output as a JSON array of game objects.</help:summary><help:xref ref="json-semantics">JSON qualifications</help:xref></help:option>
+      <help:option xml:id="opt-output-format" short="-W" argument="[FORMAT[PIECES]]"><help:summary>Select input, SAN, long-algebraic, EPD, FEN, UCI, or legacy output format.</help:summary><help:xref ref="notation-formats">Format definitions</help:xref></help:option>
+      <help:option xml:id="opt-line-width" short="-w" long="--linelength" argument="N" default="75"><help:summary>Set approximate output line width.</help:summary></help:option>
+    </help:category>
+
+    <help:category xml:id="category-content" name="Tag, annotation, and variation content">
+      <help:option xml:id="opt-seven" short="-7" long="--seven" argument="none"><help:summary>Output only the seven-tag roster, plus required FEN and any active ECO-derived tags.</help:summary></help:option>
+      <help:option xml:id="opt-roster" short="-R" argument="FILE"><help:summary>Order tags according to a one-name-per-line roster.</help:summary><help:format-ref ref="roster-file-format"/></help:option>
+      <help:option xml:id="opt-xroster" long="--xroster" argument="none" requires-refs="opt-roster"><help:summary>With -R, suppress every tag not listed in the roster.</help:summary></help:option>
+      <help:option xml:id="opt-notags" long="--notags" argument="none"><help:summary>Suppress all game tags.</help:summary></help:option>
+      <help:option xml:id="opt-detag" long="--detag" argument="TAG" repeatable="true"><help:summary>Suppress all occurrences of one named tag.</help:summary></help:option>
+      <help:option xml:id="opt-no-comments" short="-C" long="--nocomments" argument="none" conflicts-with-refs="opt-commented"><help:summary>Suppress comments.</help:summary></help:option>
+      <help:option xml:id="opt-no-nags" short="-N" long="--nonags" argument="none"><help:summary>Suppress numeric annotation glyphs.</help:summary></help:option>
+      <help:option xml:id="opt-no-variations" short="-V" long="--novars" argument="none" conflicts-with-refs="opt-splitvariants"><help:summary>Suppress recursive annotation variations.</help:summary></help:option>
+      <help:option xml:id="opt-splitvariants" long="--splitvariants" argument="[DEPTH]"><help:summary>Output each variation as a separate game with Result *; optional 0/all or positive depth.</help:summary></help:option>
+      <help:option xml:id="opt-no-move-numbers" long="--nomovenumbers" argument="none"><help:summary>Suppress move numbers.</help:summary></help:option>
+      <help:option xml:id="opt-no-results" long="--noresults" argument="none"><help:summary>Suppress terminal result tokens in games and variations.</help:summary></help:option>
+      <help:option xml:id="opt-no-checks" long="--nochecks" argument="none"><help:summary>Suppress check and mate suffixes on moves.</help:summary></help:option>
+      <help:option xml:id="opt-comment-lines" long="--commentlines" argument="none"><help:summary>Place each comment on separate output lines.</help:summary></help:option>
+      <help:option xml:id="opt-lichess-fix" long="--lichesscommentfix" argument="none"><help:summary>Move a comment at variation start to after that variation's first move.</help:summary></help:option>
+      <help:option xml:id="opt-line-numbers" long="--linenumbers" argument="MARKER"><help:summary>Add { MARKER:start:end } source-line provenance after tags.</help:summary></help:option>
+    </help:category>
+
+    <help:category xml:id="category-derived" name="Derived tags, comments, and repairs">
+      <help:option xml:id="opt-fen-final" short="-F" argument="[TEXT]"><help:summary>With no suffix add final FEN; with attached TEXT replace exact matching comments with the FEN at that point.</help:summary></help:option>
+      <help:option xml:id="opt-fen-comments" long="--fencomments" argument="none"><help:summary>Add a FEN comment after every move.</help:summary></help:option>
+      <help:option xml:id="opt-fen-comment-format" long="--fencommentformat" argument="FORMAT"><help:summary>Embed FEN comments into a C-style string containing exactly one %s insertion point.</help:summary></help:option>
+      <help:option xml:id="opt-hash-comments" long="--hashcomments" argument="none"><help:summary>Add a 16-hex-digit Polyglot hash comment after every move.</help:summary></help:option>
+      <help:option xml:id="opt-evaluation" long="--evaluation" argument="none"><help:summary>Add the built-in simplified Shannon-style position evaluation after every move.</help:summary></help:option>
+      <help:option xml:id="opt-markmatches" long="--markmatches" argument="TEXT"><help:summary>Add TEXT after positional, material, repetition, or move-rule matches; TEXT=FEN emits the matched FEN.</help:summary></help:option>
+      <help:option xml:id="opt-add-label" long="--addlabeltag" argument="none"><help:summary>Add MatchLabel from matching labeled FENPattern criteria.</help:summary></help:option>
+      <help:option xml:id="opt-add-match" long="--addmatchtag" argument="none"><help:summary>Add MaterialMatch indicating the -z/--materialz orientation.</help:summary></help:option>
+      <help:option xml:id="opt-add-hash" long="--addhashcode" argument="none"><help:summary>Add a move-sequence HashCode tag.</help:summary></help:option>
+      <help:option xml:id="opt-plycount" long="--plycount" argument="none"><help:summary>Add main-line PlyCount.</help:summary></help:option>
+      <help:option xml:id="opt-total-plycount" long="--totalplycount" argument="none"><help:summary>Add TotalPlyCount including retained variation moves.</help:summary></help:option>
+      <help:option xml:id="opt-add-elo" long="--addelotags" argument="TSV"><help:summary>Add or replace WhiteElo and BlackElo by exact player lookup.</help:summary><help:format-ref ref="player-info-format"/></help:option>
+      <help:option xml:id="opt-add-fide" long="--addfideidtags" argument="TSV"><help:summary>Add or replace WhiteFideID and BlackFideId by exact player lookup.</help:summary><help:format-ref ref="player-info-format"/></help:option>
+      <help:option xml:id="opt-fix-result" long="--fixresulttags" argument="none"><help:summary>Correct resolvable Result-tag conflicts from the detected outcome or terminator.</help:summary></help:option>
+      <help:option xml:id="opt-fix-tag-strings" long="--fixtagstrings" argument="none"><help:summary>Attempt to repair malformed quoted tag values.</help:summary></help:option>
+      <help:option xml:id="opt-no-bad-results" long="--nobadresults" argument="none"><help:summary>Reject unresolved inconsistent Result indications.</help:summary></help:option>
+      <help:option xml:id="opt-keepbroken" long="--keepbroken" argument="none"><help:summary>Retain a broken game's valid prefix and comment the remainder.</help:summary></help:option>
+      <help:option xml:id="opt-add-fen-castling" long="--addfencastling" argument="none"><help:summary>Infer missing conventional castling rights in FEN starts from king/rook placement.</help:summary></help:option>
+      <help:option xml:id="opt-no-faux-ep" long="--nofauxep" argument="none"><help:summary>Suppress FEN en-passant target squares when no legal capture exists.</help:summary></help:option>
+    </help:category>
+  </help:option-catalog>
+
+  <help:constraints xml:id="constraints">
+    <help:title>Conflicts, prerequisites, and order-sensitive behavior</help:title>
+    <help:rule xml:id="constraint-primary-output" kind="conflict" option-refs="opt-output opt-append opt-split-count opt-eco-split">Choose one primary named/count/ECO matched-output strategy. -o/-a conflict with -# and -E; -# conflicts with -E.</help:rule>
+    <help:rule xml:id="constraint-duplicate-output" kind="conflict" option-refs="opt-duplicates opt-no-duplicates">-d/--duplicates and -D/--noduplicates are mutually exclusive.</help:rule>
+    <help:rule xml:id="constraint-commented" kind="conflict" option-refs="opt-commented opt-no-comments">A game cannot be selected for containing comments while comments have been disabled.</help:rule>
+    <help:rule xml:id="constraint-variations" kind="conflict" option-refs="opt-no-variations opt-splitvariants">Variations cannot simultaneously be suppressed and split into separate games.</help:rule>
+    <help:rule xml:id="constraint-endings" kind="conflict" option-refs="opt-checkmate opt-stalemate opt-insufficient">Checkmate, stalemate, and insufficient-material terminal filters are pairwise exclusive.</help:rule>
+    <help:rule xml:id="constraint-move-rules" kind="conflict" option-refs="opt-fifty opt-seventyfive">Select either the 50-move or 75-move condition.</help:rule>
+    <help:rule xml:id="constraint-repetition" kind="conflict" option-refs="opt-repetition opt-repetition5">Select either threefold or fivefold repetition.</help:rule>
+    <help:rule xml:id="constraint-rating-winner" kind="conflict" option-refs="opt-higher-winner opt-lower-winner">Winner cannot be required to be both higher and lower rated.</help:rule>
+    <help:rule xml:id="constraint-side-to-move" kind="conflict" option-refs="opt-wtm opt-btm">Only one side-to-move positional constraint is coherent.</help:rule>
+    <help:rule xml:id="constraint-setup" kind="conflict" option-refs="opt-only-setup opt-no-setup">Setup-only and no-setup filters are mutually exclusive.</help:rule>
+    <help:rule xml:id="constraint-rosters" kind="conflict" option-refs="opt-seven opt-roster opt-xroster opt-notags">Seven-tag, custom roster, roster-only, and no-tag modes have incompatible combinations; use one coherent tag policy.</help:rule>
+    <help:rule xml:id="constraint-fen-comments" kind="interaction" option-refs="opt-fen-final opt-fen-comments">An attached -FTEXT pattern and --fencomments conflict; plain -F is subsumed by all-move FEN comments.</help:rule>
+    <help:rule xml:id="constraint-json" kind="unsupported" option-refs="opt-json opt-eco-split opt-output-format">JSON is unsupported with -E, -Wepd, and -Wcm; v26-05 logs the issue and disables JSON.</help:rule>
+    <help:rule xml:id="constraint-summary-order" kind="ordering" option-refs="opt-silent opt-quiet opt-summary">-s and --quiet overwrite verbosity; put --summary afterward to restore only the final count.</help:rule>
+    <help:rule xml:id="constraint-soundex-order" kind="ordering" option-refs="opt-soundex opt-tag-file opt-tag-command">-S must precede tag criteria.</help:rule>
+    <help:rule xml:id="constraint-tag-substr-order" kind="ordering" option-refs="opt-tagsubstr opt-tag-file opt-tag-command">Set --tagsubstr before criteria to ensure they are built with substring semantics.</help:rule>
+    <help:rule xml:id="constraint-first-limit" kind="range" option-refs="opt-firstgame opt-gamelimit">firstgame must not exceed gamelimit; option order can determine which check reports the conflict.</help:rule>
+    <help:rule xml:id="constraint-fuzzy-use" kind="prerequisite" option-refs="opt-fuzzydepth opt-duplicates opt-no-duplicates opt-no-unique">Use --fuzzydepth with at least one duplicate routing mode.</help:rule>
+    <help:rule xml:id="constraint-xroster" kind="prerequisite" option-refs="opt-xroster opt-roster">--xroster is meaningful only with -R and can suppress essential FEN/SetUp tags if omitted from the roster.</help:rule>
+    <help:rule xml:id="constraint-quiescent" kind="prerequisite" option-refs="opt-quiescent opt-plylimit">--quiescent only extends a --plylimit cutoff.</help:rule>
+    <help:rule xml:id="constraint-output-input" kind="filesystem">Never use an input path as an output path. ECO split uses append mode and a matching input/output filename can cause unbounded processing.</help:rule>
+  </help:constraints>
+
+  <help:workflows xml:id="workflows">
+    <help:title>Task-oriented recipes</help:title>
+    <help:workflow xml:id="workflow-normalize" task="normalize" option-refs="opt-quiet opt-summary opt-output">
+      <help:title>Validate and normalize a PGN collection</help:title>
+      <help:command><![CDATA[.\pgn-extract.exe --quiet --summary --output normalized.pgn games.pgn]]></help:command>
+    </help:workflow>
+    <help:workflow xml:id="workflow-audit" task="audit" option-refs="opt-report-only opt-silent opt-log-overwrite">
+      <help:title>Audit errors without writing games</help:title>
+      <help:command><![CDATA[.\pgn-extract.exe -r -s -l audit.log games.pgn]]></help:command>
+    </help:workflow>
+    <help:workflow xml:id="workflow-player" task="select-player" option-refs="opt-tag-command opt-output">
+      <help:title>Select all games by a player</help:title>
+      <help:command><![CDATA[.\pgn-extract.exe -Tp"Mikhail Tal" --output tal.pgn games.pgn]]></help:command>
+      <help:note>In PowerShell the complete -T token must remain one argument; for complex names and automation, prefer a -t criteria file.</help:note>
+    </help:workflow>
+    <help:workflow xml:id="workflow-tag-range" task="metadata-range" option-refs="opt-tag-file opt-output">
+      <help:title>Select with compound tag ranges</help:title>
+      <help:inputs><help:artifact name="criteria.txt"><![CDATA[Date >= "2020.01.01"
+Date <= "2025.12.31"
+Elo >= "2500"
+Result <> "*"]]></help:artifact></help:inputs>
+      <help:command><![CDATA[.\pgn-extract.exe -t criteria.txt -o selected.pgn games.pgn]]></help:command>
+    </help:workflow>
+    <help:workflow xml:id="workflow-position" task="position-search" option-refs="opt-position-variations opt-markmatches opt-output">
+      <help:title>Find a transposition-aware opening position</help:title>
+      <help:command><![CDATA[.\pgn-extract.exe -x position-lines.txt --markmatches FEN -o matches.pgn games.pgn]]></help:command>
+      <help:why>Matches the final board reached by each supplied line and annotates the actual matching position.</help:why>
+    </help:workflow>
+    <help:workflow xml:id="workflow-theme" task="move-theme" option-refs="opt-textual-variations opt-vanywhere opt-no-permutations">
+      <help:title>Find a textual move theme anywhere</help:title>
+      <help:command><![CDATA[.\pgn-extract.exe -P --vanywhere -v theme.txt -o theme-games.pgn games.pgn]]></help:command>
+    </help:workflow>
+    <help:workflow xml:id="workflow-material" task="material-search" option-refs="opt-materialz opt-markmatches opt-output">
+      <help:title>Find either-color bishop-pair versus two-knight positions</help:title>
+      <help:command><![CDATA[.\pgn-extract.exe --materialz "q*r*b2n0p* q=r=b0n2p=" --markmatches FEN -o endings.pgn games.pgn]]></help:command>
+    </help:workflow>
+    <help:workflow xml:id="workflow-deduplicate" task="deduplicate" option-refs="opt-duplicates opt-output">
+      <help:title>Keep first copies and review later copies</help:title>
+      <help:command><![CDATA[.\pgn-extract.exe -d duplicates.pgn -o unique.pgn games.pgn]]></help:command>
+      <help:why>The first occurrence follows normal matched routing; second and later copies go to duplicates.pgn.</help:why>
+    </help:workflow>
+    <help:workflow xml:id="workflow-new-only" task="compare-collection" option-refs="opt-checkfile opt-no-duplicates opt-output">
+      <help:title>Keep only games absent from a master</help:title>
+      <help:command><![CDATA[.\pgn-extract.exe -c master.pgn -D -o genuinely-new.pgn incoming.pgn]]></help:command>
+    </help:workflow>
+    <help:workflow xml:id="workflow-complement" task="partition" option-refs="opt-tag-file opt-output opt-nonmatching">
+      <help:title>Partition matching and nonmatching games</help:title>
+      <help:command><![CDATA[.\pgn-extract.exe -t criteria.txt -o matched.pgn -n unmatched.pgn games.pgn]]></help:command>
+    </help:workflow>
+    <help:workflow xml:id="workflow-json" task="json-export" option-refs="opt-json opt-quiet opt-output">
+      <help:title>Export structured JSON</help:title>
+      <help:command><![CDATA[.\pgn-extract.exe --json --quiet --output games.json games.pgn]]></help:command>
+      <help:warning>A zero-match run may yield an empty file; validate before feeding it to a strict JSON consumer.</help:warning>
+    </help:workflow>
+    <help:workflow xml:id="workflow-moves-only" task="moves-only" option-refs="opt-notags opt-no-comments opt-no-nags opt-no-variations opt-no-move-numbers opt-no-results opt-line-width">
+      <help:title>Write one moves-only line per game</help:title>
+      <help:command><![CDATA[.\pgn-extract.exe --notags -C -N -V --nomovenumbers --noresults -w 5000 games.pgn]]></help:command>
+    </help:workflow>
+    <help:workflow xml:id="workflow-eco" task="classify-openings" option-refs="opt-eco opt-output">
+      <help:title>Add ECO classification</help:title>
+      <help:command><![CDATA[.\pgn-extract.exe -e.\eco.pgn -o classified.pgn games.pgn]]></help:command>
+    </help:workflow>
+    <help:workflow xml:id="workflow-split" task="split-games" option-refs="opt-split-count">
+      <help:title>Write one game per numbered file</help:title>
+      <help:command><![CDATA[New-Item -ItemType Directory .\split
+Push-Location .\split
+..\pgn-extract.exe -#1 ..\games.pgn
+Pop-Location]]></help:command>
+      <help:why>Isolates overwrite-oriented numbered files in a dedicated directory.</help:why>
+    </help:workflow>
+    <help:workflow xml:id="workflow-ordo" task="prepare-ratings" option-refs="opt-seven opt-no-comments opt-no-nags opt-no-variations opt-output">
+      <help:title>Prepare compact, validated rating input</help:title>
+      <help:command><![CDATA[.\pgn-extract.exe -7 -C -N -V --quiet --summary -o rating-input.pgn games.pgn
+.\ordo-win64.exe -p rating-input.pgn -o ratings.txt]]></help:command>
+      <help:see-also><help:xref ref="source-ordo-help">Ordo XML help</help:xref> and <help:xref ref="source-ordoprep-help">Ordoprep XML help</help:xref>.</help:see-also>
+    </help:workflow>
+  </help:workflows>
+
+  <help:topic xml:id="automation" kind="guide" audience="integrator">
+    <help:title>Automation guidance</help:title>
+    <help:recommendations>
+      <help:item>Prefer long options plus separate values in generated commands; retain attached syntax only where required, such as -T.</help:item>
+      <help:item>Route game data with -o/-a and diagnostics with -l/-L; do not parse the human status stream as game data.</help:item>
+      <help:item>Use --quiet --summary in that order for one deterministic completion count plus actual errors.</help:item>
+      <help:item>Run in a dedicated output directory for -#, -E, or -Z because those modes create fixed or derived filenames.</help:item>
+      <help:item>Validate output existence, byte size, and parseability; several modes can legitimately produce no matched output.</help:item>
+      <help:item>Record executable hash, command order, working directory, source order, criteria files, ECO book, and output hashes.</help:item>
+      <help:item>Do not assume a zero exit means every input game was valid; inspect diagnostics or perform a deliberate -r audit.</help:item>
+    </help:recommendations>
+  </help:topic>
+
+  <help:troubleshooting xml:id="troubleshooting">
+    <help:title>Troubleshooting</help:title>
+    <help:problem xml:id="trouble-empty" symptom="No games were output"><help:cause>No game passed every active selection family, games were broken, output was suppressed, or --selectonly/--skipmatching removed the matches.</help:cause><help:resolution>Retry with --summary, reduce criteria one family at a time, inspect the log, and verify output routing.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-stdin" symptom="The command appears to wait"><help:cause>No PGN source was supplied, so pgn-extract is reading stdin.</help:cause><help:resolution>Supply a path or finish/close the pipeline input.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-broken" symptom="A reported game is absent from output"><help:cause>Broken games are omitted by default.</help:cause><help:resolution>Repair the source, or use --keepbroken to retain the valid prefix for diagnosis.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-overwrite" symptom="An existing output file lost its contents"><help:cause>-o, -n, -d, -#, and -l are truncate-oriented.</help:cause><help:resolution>Use -a or -L only where append semantics are desired, and choose fresh destinations.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-output-conflict" symptom="Output option conflicts with -E or -#"><help:cause>Named, count-split, and ECO-split matched output are exclusive strategies.</help:cause><help:resolution>Choose one strategy and run a second pass if another organization is needed.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-dupe-conflict" symptom="-d clashes with -D"><help:cause>-d routes duplicates to a file while -D is the alternate suppress-duplicates mode.</help:cause><help:resolution>Use -d with normal output to obtain both unique and duplicate files, or use -D alone to discard duplicates.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-dupe-surprise" symptom="An annotated game was treated as a duplicate"><help:cause>Duplicate identity is based on moves/end position, not annotations or tags.</help:cause><help:resolution>Inspect the duplicate file and order sources so the preferred copy appears first.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-memory" symptom="MallocOrDie during duplicate detection"><help:cause>The in-memory duplicate table is too large.</help:cause><help:resolution>Use -Z in a directory with enough disk space and monitor virtual.tmp.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-tag-match" symptom="A tag criterion unexpectedly misses"><help:cause>Text criteria are prefix matches, quotes may be missing, different tag families are ANDed, or case/spelling differs.</help:cause><help:resolution>Use a -t file, quote values, add --tagsubstr before -t if appropriate, and test each criterion separately.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-player-self" symptom="White Tal plus Black Tal finds almost nothing"><help:cause>Different tags are ANDed, so that means Tal versus Tal.</help:cause><help:resolution>Use the Player pseudo-tag for either color.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-soundex" symptom="Soundex has no effect or false matches"><help:cause>-S must precede tag loading and the simple algorithm is approximate.</help:cause><help:resolution>Move -S earlier; review output and prefer exact criteria when precision matters.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-transposition" symptom="-v misses a transposed opening"><help:cause>-v is textual, not board-equivalence matching.</help:cause><help:resolution>Use -x, -H, FEN, or FENPattern for position-based matching.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-sequence-order" symptom="-v matches unexpected move orders"><help:cause>Textual permutations are tried by default.</help:cause><help:resolution>Add -P to require the listed sequence order.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-fen-rights" symptom="A FEN position match ignores castling or side to move"><help:cause>Basic board matching intentionally ignores castling rights and defaults to either player to move.</help:cause><help:resolution>Add --wtm or --btm where needed; use more specific downstream verification for castling rights.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-json" symptom="--json produced PGN or no valid empty array"><help:cause>JSON is disabled with -E/-Wepd/-Wcm, or there were zero matches.</help:cause><help:resolution>Remove unsupported combinations, inspect the log, and validate/nonempty-check the artifact.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-summary" symptom="--summary produced no count"><help:cause>A later -s or --quiet cleared the summary bit.</help:cause><help:resolution>Place --summary after the silencing option.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-splitvars" symptom="--splitvariants clashes with -V"><help:cause>The source variations cannot be both suppressed and emitted as games.</help:cause><help:resolution>Remove -V and use a depth limit on --splitvariants if needed.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-roster" symptom="Moves from a setup game no longer make sense"><help:cause>--xroster suppressed required FEN and SetUp tags.</help:cause><help:resolution>Include FEN and SetUp in the -R roster or do not use --xroster.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-eco" symptom="-e cannot find eco.pgn"><help:cause>No attached ECO path, ECO_FILE value, or eco.pgn in the working directory resolved.</help:cause><help:resolution>Use an attached path such as -e.\eco.pgn or set ECO_FILE explicitly.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-eco-loop" symptom="ECO splitting continually grows an input file"><help:cause>An -E-derived append output has the same path as an input file.</help:cause><help:resolution>Stop the process and rerun in a fresh directory whose generated names cannot collide with inputs.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-args-cycle" symptom="Nested argument files recurse indefinitely"><help:cause>-A dependencies contain a cycle, which is not detected.</help:cause><help:resolution>Make the include graph acyclic and keep a single top-level argument file.</help:resolution></help:problem>
+  </help:troubleshooting>
+
+  <help:glossary xml:id="glossary">
+    <help:title>Glossary</help:title>
+    <help:term xml:id="term-check-file"><help:name>check file</help:name><help:definition>A PGN source used only to seed duplicate detection, never as normal output input.</help:definition></help:term>
+    <help:term xml:id="term-eco"><help:name>ECO</help:name><help:definition>Encyclopaedia of Chess Openings classification code and associated opening metadata.</help:definition></help:term>
+    <help:term xml:id="term-epd"><help:name>EPD</help:name><help:definition>Extended Position Description, a position-record format distinct from PGN.</help:definition></help:term>
+    <help:term xml:id="term-fen"><help:name>FEN</help:name><help:definition>Forsyth-Edwards Notation describing one chess position and state.</help:definition></help:term>
+    <help:term xml:id="term-fen-pattern"><help:name>FENPattern</help:name><help:definition>A pgn-extract wildcard board grammar derived from the board portion of FEN.</help:definition></help:term>
+    <help:term xml:id="term-nag"><help:name>NAG</help:name><help:definition>Numeric Annotation Glyph, such as $1, representing move annotations.</help:definition></help:term>
+    <help:term xml:id="term-pgn"><help:name>PGN</help:name><help:definition>Portable Game Notation for chess headers, movetext, annotations, variations, and results.</help:definition></help:term>
+    <help:term xml:id="term-ply"><help:name>ply</help:name><help:definition>One move by one side; two plies usually make a full move.</help:definition></help:term>
+    <help:term xml:id="term-polyglot"><help:name>Polyglot hash</help:name><help:definition>A conventional 64-bit Zobrist hash for a chess position.</help:definition></help:term>
+    <help:term xml:id="term-quiescence"><help:name>quiescence</help:name><help:definition>Here, a run of plies without a capture, check, or promotion.</help:definition></help:term>
+    <help:term xml:id="term-rav"><help:name>RAV</help:name><help:definition>Recursive Annotation Variation: a parenthesized alternative line in PGN.</help:definition></help:term>
+    <help:term xml:id="term-san"><help:name>SAN</help:name><help:definition>Standard Algebraic Notation, the default normalized move output.</help:definition></help:term>
+    <help:term xml:id="term-seven"><help:name>Seven Tag Roster</help:name><help:definition>Event, Site, Date, Round, White, Black, and Result.</help:definition></help:term>
+    <help:term xml:id="term-transposition"><help:name>transposition</help:name><help:definition>Different move orders that reach the same board position.</help:definition></help:term>
+  </help:glossary>
+
+  <help:relationship-graph xml:id="relationship-graph" audience="integrator maintainer">
+    <help:title>Cross-topic relationship graph</help:title>
+    <help:relation type="precedes" from-ref="stage-parse-options" to-ref="stage-eco-load"/>
+    <help:relation type="precedes" from-ref="stage-tag-prefilter" to-ref="stage-apply-moves"/>
+    <help:relation type="precedes" from-ref="stage-duplicate" to-ref="stage-route"/>
+    <help:relation type="precedes" from-ref="stage-transform" to-ref="stage-render"/>
+    <help:relation type="loads" from-ref="opt-tag-file" to-ref="tag-file-grammar"/>
+    <help:relation type="constrains" from-ref="opt-tagsubstr" to-ref="tag-file-grammar"/>
+    <help:relation type="constrains" from-ref="opt-soundex" to-ref="tag-file-grammar"/>
+    <help:relation type="implements" from-ref="opt-position-variations" to-ref="method-positional"/>
+    <help:relation type="implements" from-ref="opt-textual-variations" to-ref="method-textual"/>
+    <help:relation type="implements" from-ref="opt-hash-match" to-ref="method-hash"/>
+    <help:relation type="implements" from-ref="opt-fenpattern" to-ref="method-fen"/>
+    <help:relation type="limits" from-ref="opt-matchplylimit" to-ref="method-positional"/>
+    <help:relation type="annotates" from-ref="opt-markmatches" to-ref="method-positional"/>
+    <help:relation type="routes" from-ref="opt-duplicates" to-ref="duplicate-semantics"/>
+    <help:relation type="seeds" from-ref="opt-checkfile" to-ref="duplicate-semantics"/>
+    <help:relation type="externalizes" from-ref="opt-virtual" to-ref="duplicate-semantics"/>
+    <help:relation type="repairs" from-ref="opt-fix-result" to-ref="validation-repair"/>
+    <help:relation type="retains" from-ref="opt-keepbroken" to-ref="validation-repair"/>
+    <help:relation type="produces" from-ref="opt-json" to-ref="json-semantics"/>
+    <help:relation type="formats" from-ref="opt-output-format" to-ref="notation-formats"/>
+    <help:relation type="routes" from-ref="opt-nonmatching" to-ref="matched-unmatched-routing"/>
+    <help:relation type="classifies" from-ref="opt-eco" to-ref="term-eco"/>
+    <help:relation type="prepares-for" from-ref="workflow-ordo" to-ref="source-ordo-help"/>
+    <help:relation type="diagnoses" from-ref="workflow-audit" to-ref="trouble-broken"/>
+    <help:relation type="mitigates" from-ref="workflow-split" to-ref="trouble-overwrite"/>
+    <help:relation type="explains" from-ref="predicate-composition" to-ref="trouble-empty"/>
+  </help:relationship-graph>
+
+  <help:index xml:id="index">
+    <help:title>Concept index</help:title>
+    <help:index-entry term="arguments file" refs="opt-arguments-file argument-file-format constraint-soundex-order"/>
+    <help:index-entry term="comments" refs="opt-commented opt-no-comments opt-comment-lines opt-fen-comments opt-hash-comments"/>
+    <help:index-entry term="duplicates" refs="duplicate-semantics opt-duplicates opt-no-duplicates opt-checkfile opt-fuzzydepth opt-virtual"/>
+    <help:index-entry term="ECO" refs="opt-eco opt-eco-split term-eco workflow-eco"/>
+    <help:index-entry term="FEN" refs="term-fen fen-pattern-grammar opt-fen-final opt-fen-comments opt-fenpattern"/>
+    <help:index-entry term="JSON" refs="opt-json json-semantics workflow-json trouble-json"/>
+    <help:index-entry term="material" refs="material-matching opt-material-white opt-material-either opt-materialy opt-materialz opt-piececount"/>
+    <help:index-entry term="matching composition" refs="predicate-composition rule-and-families rule-or-tag-values rule-and-relations"/>
+    <help:index-entry term="notation" refs="notation-formats opt-output-format term-san term-epd"/>
+    <help:index-entry term="output safety" refs="overwrite-map constraint-primary-output constraint-output-input trouble-overwrite"/>
+    <help:index-entry term="positions" refs="position-matching method-positional method-hash method-fen"/>
+    <help:index-entry term="rating workflow" refs="workflow-ordo source-ordo-help source-ordoprep-help"/>
+    <help:index-entry term="tag matching" refs="tag-matching tag-file-grammar tag-cli-grammar opt-tag-file opt-tag-command"/>
+    <help:index-entry term="validation" refs="validation-repair opt-report-only opt-keepbroken opt-fix-result opt-fix-tag-strings"/>
+    <help:index-entry term="variations" refs="method-textual opt-textual-variations opt-vanywhere opt-no-permutations opt-splitvariants"/>
+  </help:index>
+
+  <help:sources xml:id="sources">
+    <help:title>Primary evidence and provenance</help:title>
+    <help:source xml:id="source-local-executable" kind="local-binary"><help:title>Local pgn-extract v26-05 Windows executable</help:title><help:path>D:\dev\proj\ucerl\pgn-extract.exe</help:path><help:scope>Version, build date, accepted spellings, help text, stream behavior, JSON shape, representative transformations, and conflicts.</help:scope></help:source>
+    <help:source xml:id="source-repository" kind="upstream-repository" xlink:href="https://github.com/kentdjb/pgn-extract/tree/3d0345b8176c60129374039a623f3db5896e3176"><help:title>Matching upstream v26-05 source state</help:title></help:source>
+    <help:source xml:id="source-help" kind="upstream-manual" xlink:href="https://github.com/kentdjb/pgn-extract/blob/3d0345b8176c60129374039a623f3db5896e3176/help.html"><help:title>Official detailed help.html</help:title><help:scope>Input grammar, option semantics, examples, limitations, and auxiliary formats.</help:scope></help:source>
+    <help:source xml:id="source-main" kind="source-code" xlink:href="https://github.com/kentdjb/pgn-extract/blob/3d0345b8176c60129374039a623f3db5896e3176/main.c"><help:title>main.c</help:title><help:scope>CLI tokenization, source list construction, JSON adjustment, ECO initialization, parse lifecycle, and summary.</help:scope></help:source>
+    <help:source xml:id="source-args" kind="source-code" xlink:href="https://github.com/kentdjb/pgn-extract/blob/3d0345b8176c60129374039a623f3db5896e3176/argsfile.c"><help:title>argsfile.c</help:title><help:scope>Option definitions, arguments-file grammar, validation, conflicts, and order-dependent state.</help:scope></help:source>
+    <help:source xml:id="source-grammar" kind="source-code" xlink:href="https://github.com/kentdjb/pgn-extract/blob/3d0345b8176c60129374039a623f3db5896e3176/grammar.c"><help:title>grammar.c</help:title><help:scope>Game grammar, result termination, game construction, and syntax recovery.</help:scope></help:source>
+    <help:source xml:id="source-lex" kind="source-code" xlink:href="https://github.com/kentdjb/pgn-extract/blob/3d0345b8176c60129374039a623f3db5896e3176/lex.c"><help:title>lex.c</help:title><help:scope>Tokens, comments, tags, move forms, and input normalization.</help:scope></help:source>
+    <help:source xml:id="source-apply" kind="source-code" xlink:href="https://github.com/kentdjb/pgn-extract/blob/3d0345b8176c60129374039a623f3db5896e3176/apply.c"><help:title>apply.c</help:title><help:scope>Move application, legality, dynamic matches, result detection, and derived evaluations.</help:scope></help:source>
+    <help:source xml:id="source-output" kind="source-code" xlink:href="https://github.com/kentdjb/pgn-extract/blob/3d0345b8176c60129374039a623f3db5896e3176/output.c"><help:title>output.c</help:title><help:scope>PGN, JSON, EPD, FEN, notation, comments, tags, variations, and file rendering.</help:scope></help:source>
+    <help:source xml:id="source-hashing" kind="source-code" xlink:href="https://github.com/kentdjb/pgn-extract/blob/3d0345b8176c60129374039a623f3db5896e3176/hashing.c"><help:title>hashing.c</help:title><help:scope>Duplicate identity, check tables, fuzzy matching, and virtual storage.</help:scope></help:source>
+    <help:source xml:id="source-fenmatcher" kind="source-code" xlink:href="https://github.com/kentdjb/pgn-extract/blob/3d0345b8176c60129374039a623f3db5896e3176/fenmatcher.c"><help:title>fenmatcher.c</help:title><help:scope>FENPattern parsing, inversion, and board matching.</help:scope></help:source>
+    <help:source xml:id="source-player-info" kind="source-code" xlink:href="https://github.com/kentdjb/pgn-extract/blob/3d0345b8176c60129374039a623f3db5896e3176/playerhashtable.c"><help:title>playerhashtable.c and csvreader.c</help:title><help:scope>Exact player lookup and tab-separated rating/ID imports.</help:scope></help:source>
+    <help:source xml:id="source-license" kind="license" xlink:href="https://github.com/kentdjb/pgn-extract/blob/3d0345b8176c60129374039a623f3db5896e3176/LICENSE"><help:title>License distributed with matching source</help:title></help:source>
+    <help:source xml:id="source-ordo-help" kind="companion-help" xlink:href="ordo-help.xml"><help:title>Ordo XML help in this workspace</help:title></help:source>
+    <help:source xml:id="source-ordoprep-help" kind="companion-help" xlink:href="ordoprep-help.xml"><help:title>Ordoprep XML help in this workspace</help:title></help:source>
+  </help:sources>
+</help:manual>

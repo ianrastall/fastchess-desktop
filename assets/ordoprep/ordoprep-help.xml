@@ -1,0 +1,878 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<help:manual
+    xmlns:help="urn:ucerl:help:1"
+    xmlns:xlink="http://www.w3.org/1999/xlink"
+    xml:id="ordoprep-help"
+    xml:lang="en"
+    product="Ordoprep"
+    product-version="0.9.9.8"
+    document-version="1.0.0">
+
+  <!--
+    Semantic conventions used by this document:
+      * Every addressable subject has a stable xml:id.
+      * Attributes named ref or ending in -ref contain one xml:id.
+      * Attributes named refs or ending in -refs contain space-separated xml:id values.
+      * Typed <relation> elements make non-hierarchical connections explicit.
+      * evidence-refs connect behavioral claims to primary evidence in <sources>.
+      * audience and task attributes support filtered or context-sensitive help views.
+  -->
+
+  <help:metadata xml:id="metadata">
+    <help:title>Ordoprep 0.9.9.8: Complete Command and Workflow Help</help:title>
+    <help:subtitle>Compact, normalize, filter, partition, and connectivity-check PGN results for Ordo and other rating tools</help:subtitle>
+    <help:abstract>
+      Ordoprep reads one or more PGN streams, extracts the White, Black, and Result tags,
+      optionally canonicalizes participant names and selects games, and writes a minimal
+      result-only PGN. It can also remove statistically problematic participants and analyze
+      the result graph as rating-connected groups. This manual documents the exact behavior
+      of the local Windows executable and its matching upstream source tag.
+    </help:abstract>
+    <help:document-status>Verified against the local executable and matching upstream source.</help:document-status>
+    <help:last-verified date="2026-08-10" timezone="America/Chicago"/>
+    <help:local-artifact>
+      <help:path>D:\dev\proj\ucerl\ordoprep-win64.exe</help:path>
+      <help:sha256>626BF553DD60C48B597D20CA1184AE623DD9E299065DFC5CC64E6AE7F454B15B</help:sha256>
+      <help:reported-version>ordoprep v0.9.9.8</help:reported-version>
+    </help:local-artifact>
+    <help:authors>
+      <help:author role="software-author">Miguel A. Ballicora</help:author>
+      <help:author role="help-author">OpenAI Codex</help:author>
+    </help:authors>
+    <help:license-summary>
+      Ordoprep is distributed under the GNU General Public License, version 3 or later,
+      without warranty. Use <help:xref ref="opt-license">--license</help:xref> or consult
+      <help:xref ref="source-license">the upstream license</help:xref> for the full terms.
+    </help:license-summary>
+  </help:metadata>
+
+  <help:semantic-model xml:id="semantic-model" audience="maintainer integrator">
+    <help:title>How this XML is connected</help:title>
+    <help:description>
+      The hierarchy supplies a readable manual; stable IDs, typed references, and the relation
+      graph supply a navigable knowledge model. A consumer can build contextual help by resolving
+      <help:code>option-ref</help:code>, <help:code>xref</help:code>, and all *-ref or *-refs attributes to xml:id values.
+    </help:description>
+    <help:reference-conventions>
+      <help:convention name="single-reference">ref, topic-ref, stage-ref, category-ref, and source-ref contain one xml:id.</help:convention>
+      <help:convention name="multiple-references">refs, evidence-refs, option-refs, and topic-refs contain space-separated xml:id values.</help:convention>
+      <help:convention name="external-reference">External resources use xlink:href and are not part of the internal ID graph.</help:convention>
+      <help:convention name="behavioral-authority">When the README and executable/source disagree, this manual follows the executable and matching source.</help:convention>
+    </help:reference-conventions>
+  </help:semantic-model>
+
+  <help:navigation xml:id="navigation">
+    <help:entry ref="quick-start" label="Quick start"/>
+    <help:entry ref="mental-model" label="What Ordoprep does"/>
+    <help:entry ref="command-syntax" label="Command syntax"/>
+    <help:entry ref="processing-pipeline" label="Processing order"/>
+    <help:entry ref="input-contract" label="Input contract"/>
+    <help:entry ref="output-contract" label="Output contract"/>
+    <help:entry ref="option-catalog" label="All options"/>
+    <help:entry ref="constraints" label="Conflicts and interactions"/>
+    <help:entry ref="connectivity" label="Connectivity groups"/>
+    <help:entry ref="workflows" label="Task recipes"/>
+    <help:entry ref="troubleshooting" label="Troubleshooting"/>
+    <help:entry ref="glossary" label="Glossary"/>
+    <help:entry ref="sources" label="Evidence and sources"/>
+  </help:navigation>
+
+  <help:topic xml:id="quick-start" kind="task" audience="all" task="compact">
+    <help:title>Quick start</help:title>
+    <help:purpose>Produce a small, clean PGN containing only player names and game results.</help:purpose>
+    <help:command xml:id="cmd-basic"><![CDATA[.\ordoprep-win64.exe -p raw.pgn -o shrunk.pgn]]></help:command>
+    <help:result>
+      <help:artifact role="primary-output" media-type="application/x-chess-pgn">shrunk.pgn</help:artifact>
+      <help:description>
+        Each completed game contains only White, Black, and Result tags plus a standalone result token.
+        Moves, comments, and every other PGN tag are omitted.
+      </help:description>
+    </help:result>
+    <help:next-steps>
+      <help:xref ref="workflow-clean-rate">Prepare input for Ordo</help:xref>
+      <help:xref ref="workflow-connectivity">Diagnose rating connectivity</help:xref>
+      <help:xref ref="workflow-aliases">Normalize inconsistent names</help:xref>
+      <help:xref ref="constraints">Check option compatibility</help:xref>
+    </help:next-steps>
+  </help:topic>
+
+  <help:topic xml:id="mental-model" kind="concept" audience="all">
+    <help:title>Mental model</help:title>
+    <help:summary>
+      Ordoprep is an in-memory results ETL tool: it extracts PGN result records, transforms names
+      and membership, optionally analyzes or filters those records, and emits minimal PGN or group artifacts.
+    </help:summary>
+    <help:capabilities>
+      <help:capability xml:id="cap-compact" verb="compact" object="PGN">
+        Remove moves, comments, and nonessential tags while preserving game order, colors, names, and result.
+      </help:capability>
+      <help:capability xml:id="cap-merge" verb="merge" object="PGN sources">
+        Read multiple files and optionally standard input into one logical game sequence.
+      </help:capability>
+      <help:capability xml:id="cap-normalize" verb="normalize" object="participant identities">
+        Replace declared aliases with a chosen canonical name before later selection and analysis.
+      </help:capability>
+      <help:capability xml:id="cap-select" verb="select" object="games">
+        Include or exclude games based on exact participant membership.
+      </help:capability>
+      <help:capability xml:id="cap-filter" verb="filter" object="participants and their games">
+        Remove low-performance, low-game-count, or recursively perfect-score participants.
+      </help:capability>
+      <help:capability xml:id="cap-connectivity" verb="analyze" object="rating connectivity">
+        Find independently rateable result groups, report them, split them, or retain the largest group.
+      </help:capability>
+    </help:capabilities>
+    <help:non-goals>
+      <help:item>Ordoprep does not calculate ratings; <help:xref ref="term-ordo">Ordo</help:xref> does.</help:item>
+      <help:item>Ordoprep does not validate full PGN syntax, chess legality, or movetext.</help:item>
+      <help:item>Ordoprep does not preserve Event, Site, Date, Round, ECO, time control, opening, or provenance tags.</help:item>
+      <help:item>Ordoprep does not edit games in place; name a distinct output file.</help:item>
+    </help:non-goals>
+  </help:topic>
+
+  <help:topic xml:id="command-syntax" kind="reference" audience="all">
+    <help:title>Command syntax</help:title>
+    <help:syntax><![CDATA[.\ordoprep-win64.exe [OPTIONS] [--] [PGN_FILE ...]]]></help:syntax>
+    <help:syntax-notes>
+      <help:note>
+        Use the executable name <help:code>.\ordoprep-win64.exe</help:code> from this workspace.
+        Other installations may expose the command as <help:code>ordoprep</help:code>.
+      </help:note>
+      <help:note>
+        Use <help:code>--</help:code> before positional PGN paths, especially if a path begins with a hyphen.
+        Positional sources are processed after sources named by <help:xref ref="opt-pgn">-p</help:xref>
+        and <help:xref ref="opt-pgn-list">-P</help:xref>.
+      </help:note>
+      <help:note>
+        Quote any path containing spaces. In PowerShell, double or single quotes are accepted by the shell.
+      </help:note>
+      <help:note>
+        The implementation accepts file inputs and <help:xref ref="opt-stdin">--stdin</help:xref>
+        together. Files are read first; standard input is read last.
+      </help:note>
+    </help:syntax-notes>
+    <help:input-composition evidence-refs="source-main source-pgnget">
+      <help:source-order rank="1" option-ref="opt-pgn">The single path supplied by -p, if any.</help:source-order>
+      <help:source-order rank="2" option-ref="opt-pgn-list">Paths read from the -P list, in list order.</help:source-order>
+      <help:source-order rank="3" option-ref="opt-positional-input">Positional paths, in command-line order.</help:source-order>
+      <help:source-order rank="4" option-ref="opt-stdin">Standard input, when --stdin is present.</help:source-order>
+    </help:input-composition>
+  </help:topic>
+
+  <help:topic xml:id="processing-pipeline" kind="concept" audience="all">
+    <help:title>Processing pipeline and option timing</help:title>
+    <help:summary>
+      Ordering matters because aliases affect selection, selection affects statistics and group analysis,
+      and group-report modes can terminate before participant filters or ordinary PGN output.
+    </help:summary>
+    <help:stages>
+      <help:stage xml:id="stage-parse-options" ordinal="1" name="parse-options">
+        Parse options, reject explicit conflicts, and assemble the ordered list of input sources.
+      </help:stage>
+      <help:stage xml:id="stage-load-aliases" ordinal="2" name="load-aliases">
+        Preload canonical names and aliases from the synonym CSV.
+      </help:stage>
+      <help:stage xml:id="stage-read-pgn" ordinal="3" name="read-pgn">
+        Read each source and collect complete White/Black/Result triples in source order.
+      </help:stage>
+      <help:stage xml:id="stage-membership" ordinal="4" name="membership-selection">
+        Apply either the include list or exclude list by marking nonqualifying games ignored.
+      </help:stage>
+      <help:stage xml:id="stage-statistics" ordinal="5" name="statistics">
+        Count active white wins, draws, black wins, and ignored/no-result records; print them unless quiet.
+      </help:stage>
+      <help:stage xml:id="stage-groups" ordinal="6" name="group-analysis">
+        Build rating-connected groups when a group report, group split, or major-only operation was requested.
+      </help:stage>
+      <help:stage xml:id="stage-group-artifacts" ordinal="7" name="group-artifacts">
+        Write requested group report/player/game artifacts. Unless major-only is also active, group mode exits successfully here.
+      </help:stage>
+      <help:stage xml:id="stage-participant-filter" ordinal="8" name="participant-filter">
+        Calculate performance and apply the one selected threshold/perfect-score filter.
+      </help:stage>
+      <help:stage xml:id="stage-primary-output" ordinal="9" name="primary-output">
+        Write all active games, or only games wholly inside group 1 when major-only is active.
+      </help:stage>
+      <help:stage xml:id="stage-remaining-output" ordinal="10" name="remaining-output">
+        Write games marked ignored by membership or participant filtering when --remaining is present.
+      </help:stage>
+    </help:stages>
+    <help:critical-note severity="important" evidence-refs="source-main2">
+      <help:xref ref="opt-groups">--groups</help:xref>, <help:xref ref="opt-group-games">--group-games</help:xref>,
+      or <help:xref ref="opt-group-players">--group-players</help:xref> without
+      <help:xref ref="opt-major-only">--major-only</help:xref> is an analysis/splitting run, not a normal compacting run.
+      It exits after group artifacts; an <help:code>-o</help:code> file may therefore be empty, and participant filters
+      or <help:code>--remaining</help:code> are not reached.
+    </help:critical-note>
+  </help:topic>
+
+  <help:topic xml:id="input-contract" kind="reference" audience="all">
+    <help:title>PGN input contract</help:title>
+    <help:required-data>
+      <help:field xml:id="field-white" pgn-tag="White" required="true">Exact participant name for White.</help:field>
+      <help:field xml:id="field-black" pgn-tag="Black" required="true">Exact participant name for Black.</help:field>
+      <help:field xml:id="field-result" pgn-tag="Result" required="true">A supported result token.</help:field>
+    </help:required-data>
+    <help:parser-behavior evidence-refs="source-pgnget">
+      <help:item>
+        The scanner searches text lines for the exact, case-sensitive prefixes
+        <help:code>[White "</help:code>, <help:code>[Black "</help:code>, and <help:code>[Result "</help:code>.
+        Use conventional one-tag-per-line PGN.
+      </help:item>
+      <help:item>Movetext, comments, variations, and every other tag are ignored.</help:item>
+      <help:item>A game is collected as soon as one White, one Black, and one Result value have been seen; conventional tag order is safest.</help:item>
+      <help:item>An incomplete trailing record is not emitted.</help:item>
+      <help:item>Participant matching is exact and case-sensitive unless variants are declared as aliases.</help:item>
+      <help:item>All games and names are held in memory; practical capacity is limited by available memory.</help:item>
+    </help:parser-behavior>
+    <help:result-values>
+      <help:result-value token="1-0" internal-meaning="white-win" emitted="true" points-white="1" points-black="0"/>
+      <help:result-value token="1/2-1/2" internal-meaning="draw" emitted="true" points-white="0.5" points-black="0.5"/>
+      <help:result-value token="=-=" internal-meaning="draw" emitted="true" emitted-as="1/2-1/2" points-white="0.5" points-black="0.5"/>
+      <help:result-value token="0-1" internal-meaning="black-win" emitted="true" points-white="0" points-black="1"/>
+      <help:result-value token="*" internal-meaning="no-result" emitted="false"/>
+    </help:result-values>
+    <help:warning severity="error">
+      Any other Result-tag value terminates the run with a PGN reading error. Ordoprep reads the Result tag,
+      not a result token appearing only in movetext.
+    </help:warning>
+    <help:minimal-valid-example><![CDATA[
+[White "Engine A 1.0"]
+[Black "Engine B 2.0"]
+[Result "1/2-1/2"]
+
+1/2-1/2
+]]></help:minimal-valid-example>
+  </help:topic>
+
+  <help:topic xml:id="auxiliary-file-formats" kind="reference" audience="all">
+    <help:title>Auxiliary file formats</help:title>
+    <help:format xml:id="format-pgn-list" used-by-ref="opt-pgn-list" media-type="text/plain">
+      <help:name>PGN file list</help:name>
+      <help:rules>
+        <help:item>One path per nonblank line.</help:item>
+        <help:item>A path containing spaces may be enclosed in double quotes.</help:item>
+        <help:item>Each line must parse as exactly one CSV field; do not append comments or extra columns.</help:item>
+      </help:rules>
+      <help:example><![CDATA[
+maininput.pgn
+input2.pgn
+"archive files\input 3.pgn"
+]]></help:example>
+    </help:format>
+    <help:format xml:id="format-aliases" used-by-refs="opt-synonyms opt-aliases" media-type="text/csv">
+      <help:name>Synonym/alias CSV</help:name>
+      <help:rules>
+        <help:item>Each nonblank row is <help:code>canonical,alias1,alias2,...</help:code>.</help:item>
+        <help:item>The first field is the output name; every later field maps to it.</help:item>
+        <help:item>Quote fields containing commas; quoting all fields is recommended.</help:item>
+        <help:item>Matching is exact and case-sensitive, so capitalization variants require explicit entries.</help:item>
+        <help:item>Avoid declaring the same alias in competing rows; the name registry is established as rows are loaded.</help:item>
+      </help:rules>
+      <help:example><![CDATA[
+"Gaviota 1.0","Gaviota v1","gaviota v1.0"
+"Stockfish 6","Stockfish 6.0"
+]]></help:example>
+    </help:format>
+    <help:format xml:id="format-name-list" used-by-refs="opt-include opt-exclude" media-type="text/plain">
+      <help:name>Participant list</help:name>
+      <help:rules>
+        <help:item>One exact participant name per nonblank line, optionally double-quoted.</help:item>
+        <help:item>The parser accepts one CSV field only; if a multi-column CSV is supplied, the row does not match.</help:item>
+        <help:item>Names are resolved after aliases are loaded, so either a canonical name or a declared alias can select the canonical participant.</help:item>
+        <help:item>Unmatched names warn by default but do not stop the run.</help:item>
+      </help:rules>
+      <help:example><![CDATA[
+"Stockfish 6"
+Komodo 9.1
+]]></help:example>
+    </help:format>
+  </help:topic>
+
+  <help:topic xml:id="output-contract" kind="reference" audience="all">
+    <help:title>Outputs and preservation rules</help:title>
+    <help:primary-output>
+      <help:destination>
+        <help:xref ref="opt-output">-o FILE</help:xref> writes to a file. Without -o, minimal PGN is written to standard output.
+      </help:destination>
+      <help:record-shape evidence-refs="source-main2"><![CDATA[
+[White "CANONICAL WHITE NAME"]
+[Black "CANONICAL BLACK NAME"]
+[Result "RESULT"]
+RESULT
+
+]]></help:record-shape>
+      <help:record-shape-note>RESULT is one of <help:code>1-0</help:code>, <help:code>1/2-1/2</help:code>, or <help:code>0-1</help:code>.</help:record-shape-note>
+      <help:preserved>
+        <help:item>Input source order and game order.</help:item>
+        <help:item>White/Black orientation.</help:item>
+        <help:item>Supported decisive/draw result, with <help:code>=-=</help:code> normalized to <help:code>1/2-1/2</help:code>.</help:item>
+        <help:item>Participant names, after optional alias canonicalization.</help:item>
+      </help:preserved>
+      <help:discarded>
+        <help:item>Moves, comments, annotations, and variations.</help:item>
+        <help:item>Every tag except White, Black, and Result.</help:item>
+        <help:item>Games whose Result tag is <help:code>*</help:code>.</help:item>
+        <help:item>Games marked ignored by active filters.</help:item>
+      </help:discarded>
+    </help:primary-output>
+    <help:stdout-hazard severity="important" evidence-refs="source-main2 source-timer">
+      Progress, statistics, exclusion lists, and timing messages also use standard output.
+      When the PGN itself is sent to standard output, use <help:xref ref="opt-quiet">--quiet</help:xref>
+      and do not use <help:xref ref="opt-timelog">--timelog</help:xref>, or diagnostic text will contaminate the PGN stream.
+      Using <help:code>-o FILE</help:code> keeps the PGN file separate from console progress.
+    </help:stdout-hazard>
+    <help:remaining-semantics evidence-refs="source-main2">
+      <help:xref ref="opt-remaining">--remaining</help:xref> is not a universal complement of primary output.
+      It writes decisive/drawn games explicitly marked ignored by include/exclude or participant filtering.
+      It does not include <help:code>*</help:code> records, and with major-only it does not automatically contain games outside group 1.
+    </help:remaining-semantics>
+  </help:topic>
+
+  <help:topic xml:id="performance-filters" kind="concept" audience="analyst">
+    <help:title>Participant-level filters</help:title>
+    <help:scoring>
+      Performance is score divided by games: win = 1, draw = 0.5, loss = 0.
+      When a participant is removed, every game involving that participant is removed.
+    </help:scoring>
+    <help:filter-semantics>
+      <help:filter option-ref="opt-no-perfects" recursive="true">
+        Remove participants whose current active score is either 0% or 100%, then recalculate and repeat until no further participant becomes perfect.
+      </help:filter>
+      <help:filter option-ref="opt-min-perf" recursive="false">
+        Calculate once and remove participants strictly below the requested percentage. A participant exactly at the threshold remains.
+      </help:filter>
+      <help:filter option-ref="opt-min-games" recursive="false">
+        Calculate once and remove participants with strictly fewer than the requested number of active games. A participant exactly at the threshold remains.
+      </help:filter>
+    </help:filter-semantics>
+    <help:constraint-ref ref="constraint-one-structural-filter"/>
+  </help:topic>
+
+  <help:topic xml:id="connectivity" kind="concept" audience="analyst">
+    <help:title>Rating connectivity and groups</help:title>
+    <help:definition evidence-refs="source-groups source-encount">
+      A group is a set of participants whose results provide sufficient two-way information, directly or through cycles,
+      to place them on one relative rating scale. Ordoprep aggregates games by ordered White/Black pairing.
+      An aggregate containing a draw or results in both directions creates a direct two-way connection.
+      A one-sided sweep creates only a winner-to-loser link; directed cycles can still join components.
+    </help:definition>
+    <help:why-it-matters>
+      Disconnected or only one-way-linked pools do not support a single reliable finite rating scale without additional assumptions.
+      Use group analysis before sending a heterogeneous corpus to a rating program.
+    </help:why-it-matters>
+    <help:ordering evidence-refs="source-groups">
+      Groups are ordered by descending participant count. Ties are resolved alphabetically by the first participant name.
+      Therefore group 1 is the <help:xref ref="term-major-group">major group</help:xref> used by --major-only.
+    </help:ordering>
+    <help:group-artifacts>
+      <help:artifact option-ref="opt-groups">A text pass/fail report and participant listing.</help:artifact>
+      <help:artifact option-ref="opt-group-games">One minimal PGN per nonsingleton group.</help:artifact>
+      <help:artifact option-ref="opt-group-players">One one-column quoted CSV per group, including singleton groups.</help:artifact>
+      <help:artifact option-ref="opt-major-only">One minimal PGN containing only games whose two participants are both in group 1.</help:artifact>
+    </help:group-artifacts>
+    <help:filename-patterns>
+      <help:pattern option-ref="opt-group-games"><![CDATA[BASE.000000001.pgn]]></help:pattern>
+      <help:pattern option-ref="opt-group-players"><![CDATA[BASE.000000001.csv]]></help:pattern>
+    </help:filename-patterns>
+  </help:topic>
+
+  <help:option-catalog xml:id="option-catalog">
+    <help:title>Complete option reference</help:title>
+
+    <help:category xml:id="category-information" name="Information and diagnostics">
+      <help:option xml:id="opt-help" short="-h" long="--help" argument="none" terminates="true" stage-ref="stage-parse-options" evidence-refs="source-local-help source-main">
+        <help:summary>Print introductory help, examples, all switches, copyright, and exit successfully.</help:summary>
+        <help:see-also refs="opt-show-switches opt-version opt-license"/>
+      </help:option>
+      <help:option xml:id="opt-show-switches" short="-H" long="--show-switches" argument="none" terminates="true" stage-ref="stage-parse-options" evidence-refs="source-local-help source-main">
+        <help:summary>Print only the switch list and exit successfully.</help:summary>
+        <help:see-also refs="opt-help"/>
+      </help:option>
+      <help:option xml:id="opt-version" short="-v" long="--version" argument="none" terminates="true" stage-ref="stage-parse-options" evidence-refs="source-local-version source-main">
+        <help:summary>Print program name and version, then exit successfully.</help:summary>
+        <help:observed-output>ordoprep v0.9.9.8</help:observed-output>
+      </help:option>
+      <help:option xml:id="opt-license" short="-L" long="--license" argument="none" terminates="true" stage-ref="stage-parse-options" evidence-refs="source-local-license source-main">
+        <help:summary>Print version and GPL license notice, then exit successfully.</help:summary>
+      </help:option>
+      <help:option xml:id="opt-quiet" short="-q" long="--quiet" argument="none" stage-ref="stage-read-pgn" evidence-refs="source-main source-main2">
+        <help:summary>Suppress routine progress, statistics, uploaded-name notices, and participant exclusion listings.</help:summary>
+        <help:detail>Errors remain on standard error. Unmatched include/exclude warnings require --no-warnings.</help:detail>
+        <help:equivalent-to ref="opt-silent"/>
+        <help:recommended-with refs="opt-stdin opt-positional-input" rationale="Use whenever standard output must remain clean PGN."/>
+      </help:option>
+      <help:option xml:id="opt-silent" long="--silent" argument="none" stage-ref="stage-read-pgn" evidence-refs="source-main">
+        <help:summary>Exact alias of --quiet.</help:summary>
+        <help:equivalent-to ref="opt-quiet"/>
+      </help:option>
+      <help:option xml:id="opt-timelog" long="--timelog" argument="none" stage-ref="stage-read-pgn" evidence-refs="source-main source-timer">
+        <help:summary>Print elapsed CPU time after internal processing steps.</help:summary>
+        <help:detail>Timing lines go to standard output and are not suppressed by --quiet.</help:detail>
+        <help:avoid-with ref="opt-output" condition="When -o is omitted and standard output is intended to be PGN."/>
+      </help:option>
+      <help:option xml:id="opt-no-warnings" long="--no-warnings" argument="none" stage-ref="stage-membership" evidence-refs="source-main source-pgnget">
+        <help:summary>Suppress only the warnings for include/exclude list entries that match no known name.</help:summary>
+        <help:detail>It does not suppress parsing, file, memory, or parameter errors.</help:detail>
+        <help:relevant-with refs="opt-include opt-exclude"/>
+      </help:option>
+    </help:category>
+
+    <help:category xml:id="category-input" name="Input sources and identity normalization">
+      <help:option xml:id="opt-pgn" short="-p" long="--pgn" argument="FILE" repeatable="not-useful" stage-ref="stage-read-pgn" evidence-refs="source-main source-pgnget">
+        <help:summary>Add one primary PGN file.</help:summary>
+        <help:detail>If repeated, only the last -p value is retained. Use positional files or -P for multiple sources.</help:detail>
+        <help:format-ref ref="input-contract"/>
+      </help:option>
+      <help:option xml:id="opt-pgn-list" short="-P" long="--pgn-list" argument="FILE" repeatable="not-useful" stage-ref="stage-read-pgn" evidence-refs="source-main">
+        <help:summary>Read an ordered list of PGN paths from a text/one-field-CSV file.</help:summary>
+        <help:detail>If repeated, only the last -P value is retained.</help:detail>
+        <help:format-ref ref="format-pgn-list"/>
+      </help:option>
+      <help:option xml:id="opt-positional-input" spelling="-- PGN_FILE ..." argument="PGN_FILE" stage-ref="stage-read-pgn" evidence-refs="source-main">
+        <help:summary>Add any number of positional PGN inputs.</help:summary>
+        <help:detail>The explicit -- delimiter is recommended and is required to stop option interpretation reliably.</help:detail>
+      </help:option>
+      <help:option xml:id="opt-stdin" long="--stdin" argument="none" stage-ref="stage-read-pgn" evidence-refs="source-main source-pgnget">
+        <help:summary>Read an additional PGN stream from standard input after all file inputs.</help:summary>
+        <help:detail>Use --quiet when the result is also written to standard output.</help:detail>
+      </help:option>
+      <help:option xml:id="opt-synonyms" short="-Y" long="--synonyms" argument="FILE" stage-ref="stage-load-aliases" evidence-refs="source-main source-pgnget">
+        <help:summary>Load a CSV mapping canonical participant names to aliases.</help:summary>
+        <help:detail>Aliases affect emitted names, include/exclude matching, performance aggregation, and connectivity.</help:detail>
+        <help:format-ref ref="format-aliases"/>
+        <help:equivalent-to ref="opt-aliases"/>
+      </help:option>
+      <help:option xml:id="opt-aliases" long="--aliases" argument="FILE" stage-ref="stage-load-aliases" evidence-refs="source-main">
+        <help:summary>Long-form alias of --synonyms.</help:summary>
+        <help:equivalent-to ref="opt-synonyms"/>
+      </help:option>
+    </help:category>
+
+    <help:category xml:id="category-membership" name="Game membership selection">
+      <help:option xml:id="opt-include" short="-i" long="--include" argument="FILE" stage-ref="stage-membership" evidence-refs="source-main source-pgnget">
+        <help:summary>Keep a game only when both participants occur in the supplied name list.</help:summary>
+        <help:detail>A game with one listed and one unlisted participant is excluded.</help:detail>
+        <help:format-ref ref="format-name-list"/>
+        <help:conflicts-with ref="opt-exclude" constraint-ref="constraint-include-exclude"/>
+        <help:removed-games-captured-by ref="opt-remaining"/>
+      </help:option>
+      <help:option xml:id="opt-exclude" short="-x" long="--exclude" argument="FILE" stage-ref="stage-membership" evidence-refs="source-main source-pgnget">
+        <help:summary>Remove every game in which either participant occurs in the supplied name list.</help:summary>
+        <help:format-ref ref="format-name-list"/>
+        <help:conflicts-with ref="opt-include" constraint-ref="constraint-include-exclude"/>
+        <help:removed-games-captured-by ref="opt-remaining"/>
+      </help:option>
+      <help:option xml:id="opt-remaining" long="--remaining" argument="FILE" stage-ref="stage-remaining-output" evidence-refs="source-main source-main2">
+        <help:summary>Write decisive/drawn games marked ignored by membership or participant filtering.</help:summary>
+        <help:detail>Not a general complement: it omits * records and does not capture the non-major groups selected away by --major-only.</help:detail>
+        <help:see-also refs="output-contract opt-include opt-exclude opt-no-perfects opt-min-perf opt-min-games"/>
+      </help:option>
+    </help:category>
+
+    <help:category xml:id="category-filter" name="Participant filters">
+      <help:option xml:id="opt-no-perfects" short="-d" long="--no-perfects" argument="none" stage-ref="stage-participant-filter" evidence-refs="source-main source-main2">
+        <help:summary>Recursively remove participants with no wins/points or no losses/dropped points.</help:summary>
+        <help:detail>After each removal wave, performance is recomputed until stable.</help:detail>
+        <help:constraint-ref ref="constraint-one-structural-filter"/>
+        <help:removed-games-captured-by ref="opt-remaining"/>
+      </help:option>
+      <help:option xml:id="opt-min-perf" short="-m" long="--min-perf" argument="NUM" units="percent" recommended-domain="0..100" stage-ref="stage-participant-filter" evidence-refs="source-main source-main2">
+        <help:summary>Remove participants whose one-pass score percentage is strictly less than NUM.</help:summary>
+        <help:detail>The parser accepts a floating-point number and does not enforce the recommended 0-to-100 range.</help:detail>
+        <help:constraint-ref ref="constraint-one-structural-filter"/>
+        <help:removed-games-captured-by ref="opt-remaining"/>
+      </help:option>
+      <help:option xml:id="opt-min-games" short="-M" long="--min-games" argument="NUM" units="games" recommended-domain="nonnegative-integer" stage-ref="stage-participant-filter" evidence-refs="source-local-help source-main source-main2">
+        <help:summary>Remove participants whose one-pass active game count is strictly less than NUM.</help:summary>
+        <help:detail>Use uppercase -M. The upstream v0.9.9.8 README's example says -g20, but -g is actually the groups-report option in this binary.</help:detail>
+        <help:constraint-ref ref="constraint-one-structural-filter"/>
+        <help:removed-games-captured-by ref="opt-remaining"/>
+      </help:option>
+    </help:category>
+
+    <help:category xml:id="category-output" name="Primary and connectivity outputs">
+      <help:option xml:id="opt-output" short="-o" long="--output" argument="FILE" default="standard-output" stage-ref="stage-primary-output" evidence-refs="source-main source-main2">
+        <help:summary>Write the primary minimal PGN to FILE instead of standard output.</help:summary>
+        <help:detail>Choose a path distinct from every input and ensure its directory is writable.</help:detail>
+      </help:option>
+      <help:option xml:id="opt-major-only" long="--major-only" argument="none" stage-ref="stage-groups" evidence-refs="source-main source-main2 source-groups">
+        <help:summary>Write only games whose two participants belong to the largest rating-connected group.</help:summary>
+        <help:detail>Group 1 is largest by participant count. Games outside it are not marked for --remaining.</help:detail>
+        <help:constraint-ref ref="constraint-one-structural-filter"/>
+        <help:see-also refs="connectivity opt-groups opt-group-games opt-group-players"/>
+      </help:option>
+      <help:option xml:id="opt-groups" short="-g" long="--groups" argument="FILE" stage-ref="stage-group-artifacts" terminates-normal-output="true" evidence-refs="source-main source-main2 source-groups">
+        <help:summary>Write a text report stating whether all active participants form one rating-connected group.</help:summary>
+        <help:detail>On failure, groups and their alphabetically sorted participants are listed. This mode exits after group artifacts.</help:detail>
+        <help:constraint-ref ref="constraint-one-structural-filter"/>
+        <help:see-also refs="connectivity workflow-connectivity"/>
+      </help:option>
+      <help:option xml:id="opt-group-games" long="--group-games" argument="BASE" stage-ref="stage-group-artifacts" terminates-normal-output="unless-major-only" evidence-refs="source-main source-main2">
+        <help:summary>Write each nonsingleton connectivity group's games to BASE.#########.pgn.</help:summary>
+        <help:detail>Group numbers are nine-digit, one-based, and ordered largest first. Singleton groups have no PGN file.</help:detail>
+        <help:limited-by ref="opt-group-max"/>
+      </help:option>
+      <help:option xml:id="opt-group-players" long="--group-players" argument="BASE" stage-ref="stage-group-artifacts" terminates-normal-output="unless-major-only" evidence-refs="source-main source-main2">
+        <help:summary>Write each connectivity group's participant names to BASE.#########.csv.</help:summary>
+        <help:detail>Each row is one double-quoted name; singleton groups are included.</help:detail>
+        <help:limited-by ref="opt-group-max"/>
+      </help:option>
+      <help:option xml:id="opt-group-max" long="--group-max" argument="NUM" default="1000" units="groups" stage-ref="stage-group-artifacts" evidence-refs="source-main source-main2">
+        <help:summary>Limit the number of numbered group game/player files written.</help:summary>
+        <help:detail>It does not change group analysis, --groups report content, or --major-only selection.</help:detail>
+        <help:relevant-with refs="opt-group-games opt-group-players"/>
+      </help:option>
+    </help:category>
+  </help:option-catalog>
+
+  <help:constraints xml:id="constraints">
+    <help:title>Conflicts, dependencies, and surprising interactions</help:title>
+    <help:rule xml:id="constraint-include-exclude" kind="mutual-exclusion" enforced="true" option-refs="opt-include opt-exclude" evidence-refs="source-main">
+      <help:description>Choose include or exclude, never both in one invocation.</help:description>
+      <help:error-text>Switches -x and -i cannot be used at the same time</help:error-text>
+    </help:rule>
+    <help:rule xml:id="constraint-one-structural-filter" kind="at-most-one" enforced="true" option-refs="opt-major-only opt-groups opt-no-perfects opt-min-perf opt-min-games" evidence-refs="source-main">
+      <help:description>At most one of --major-only, --groups/-g, --no-perfects/-d, --min-perf/-m, and --min-games/-M may be used.</help:description>
+      <help:rationale>Each is a distinct structural selection mode in this version.</help:rationale>
+      <help:error-text>Switches --major-only, -g, -d, -m, and -M cannot be used at the same time</help:error-text>
+    </help:rule>
+    <help:rule xml:id="constraint-group-early-exit" kind="control-flow" enforced="implementation" option-refs="opt-groups opt-group-games opt-group-players opt-major-only" evidence-refs="source-main2">
+      <help:description>Any group-report/split option causes a successful early exit after group artifacts unless --major-only is also present.</help:description>
+      <help:consequence>
+        Without --major-only, ordinary -o output, participant filtering, and --remaining are not performed.
+        Run connectivity diagnosis and filtering as separate commands.
+      </help:consequence>
+    </help:rule>
+    <help:rule xml:id="constraint-group-split-filter-trap" kind="avoid-combination" enforced="not-rejected" option-refs="opt-group-games opt-group-players opt-no-perfects opt-min-perf opt-min-games" evidence-refs="source-main source-main2">
+      <help:description>Do not combine group splitting with a participant filter.</help:description>
+      <help:rationale>The command line is accepted, but early group-mode exit occurs before the participant filter.</help:rationale>
+    </help:rule>
+    <help:rule xml:id="constraint-clean-stdout" kind="stream-safety" enforced="user" option-refs="opt-output opt-quiet opt-silent opt-timelog" evidence-refs="source-main2 source-timer">
+      <help:description>If primary PGN goes to standard output, enable quiet/silent and disable timelog.</help:description>
+    </help:rule>
+    <help:rule xml:id="constraint-remaining-scope" kind="semantic-scope" enforced="implementation" option-refs="opt-remaining opt-major-only" evidence-refs="source-main2">
+      <help:description>--remaining contains explicitly ignored decisive/drawn games, not every record absent from primary output.</help:description>
+    </help:rule>
+  </help:constraints>
+
+  <help:workflows xml:id="workflows">
+    <help:title>Task-oriented recipes</help:title>
+
+    <help:workflow xml:id="workflow-compact" task="compact" option-refs="opt-pgn opt-output">
+      <help:title>Compact one PGN</help:title>
+      <help:command><![CDATA[.\ordoprep-win64.exe -p raw.pgn -o shrunk.pgn]]></help:command>
+      <help:outcome>Result-only PGN in input order, with console progress kept separate.</help:outcome>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-multiple-inputs" task="merge" option-refs="opt-pgn opt-positional-input opt-output">
+      <help:title>Merge several PGNs</help:title>
+      <help:command><![CDATA[.\ordoprep-win64.exe -p primary.pgn -o merged.pgn -- second.pgn "archive\third set.pgn"]]></help:command>
+      <help:alternative option-ref="opt-pgn-list"><![CDATA[.\ordoprep-win64.exe -P pgn-files.txt -o merged.pgn]]></help:alternative>
+      <help:outcome>All sources become one output stream in the documented source order.</help:outcome>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-aliases" task="normalize" option-refs="opt-pgn opt-synonyms opt-output">
+      <help:title>Canonicalize participant names</help:title>
+      <help:precondition>Create aliases.csv using <help:xref ref="format-aliases">the alias format</help:xref>.</help:precondition>
+      <help:command><![CDATA[.\ordoprep-win64.exe -p raw.pgn -Y aliases.csv -o canonical.pgn]]></help:command>
+      <help:outcome>Aliases are merged before selection, statistics, filtering, grouping, and output.</help:outcome>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-include-audit" task="select audit" option-refs="opt-pgn opt-include opt-remaining opt-output">
+      <help:title>Keep a closed participant pool and audit removed games</help:title>
+      <help:command><![CDATA[.\ordoprep-win64.exe -p raw.pgn -i participants.txt -o included.pgn --remaining excluded.pgn]]></help:command>
+      <help:outcome>included.pgn contains games with both players listed; excluded.pgn contains decisive/drawn games rejected by that rule.</help:outcome>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-no-perfects" task="filter" option-refs="opt-pgn opt-no-perfects opt-remaining opt-output">
+      <help:title>Recursively remove perfect-score participants</help:title>
+      <help:command><![CDATA[.\ordoprep-win64.exe -p raw.pgn -d -o stable.pgn --remaining removed.pgn]]></help:command>
+      <help:outcome>stable.pgn contains the fixed point after recursive removal; removed.pgn records filtered games.</help:outcome>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-minimums" task="filter" option-refs="opt-min-games opt-min-perf">
+      <help:title>Apply minimum games or minimum performance</help:title>
+      <help:step ordinal="1"><help:command><![CDATA[.\ordoprep-win64.exe -p raw.pgn -M 20 -o at-least-20.pgn]]></help:command></help:step>
+      <help:step ordinal="2" optional="true">
+        If a performance threshold is also wanted, run it as a second invocation because -M and -m conflict.
+        <help:command><![CDATA[.\ordoprep-win64.exe -p at-least-20.pgn -m 5 -o at-least-20-and-5pct.pgn]]></help:command>
+      </help:step>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-connectivity" task="diagnose extract" option-refs="opt-groups opt-major-only opt-output">
+      <help:title>Diagnose connectivity, then extract the major group</help:title>
+      <help:step ordinal="1">
+        Produce the report. This is intentionally a report-only invocation.
+        <help:command><![CDATA[.\ordoprep-win64.exe -p prepared.pgn -g groups.txt]]></help:command>
+      </help:step>
+      <help:step ordinal="2">
+        If the report fails, extract group 1 in a separate invocation.
+        <help:command><![CDATA[.\ordoprep-win64.exe -p prepared.pgn --major-only -o major.pgn]]></help:command>
+      </help:step>
+      <help:outcome>major.pgn is suitable for a single connected rating calculation.</help:outcome>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-split-groups" task="partition" option-refs="opt-group-games opt-group-players opt-group-max">
+      <help:title>Split every connectivity group into games and player lists</help:title>
+      <help:command><![CDATA[.\ordoprep-win64.exe -p prepared.pgn --group-games groups\games --group-players groups\players --group-max 1000]]></help:command>
+      <help:outcome>Numbered .pgn and .csv artifacts are written; no ordinary -o output is produced.</help:outcome>
+      <help:precondition>The destination directory must already exist.</help:precondition>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-stdin" task="stream" option-refs="opt-stdin opt-quiet">
+      <help:title>Use a clean standard-input/standard-output pipeline</help:title>
+      <help:command><![CDATA[Get-Content -Raw raw.pgn | .\ordoprep-win64.exe --stdin --quiet > shrunk.pgn]]></help:command>
+      <help:warning>Do not add --timelog; it writes timing lines to the same standard-output stream.</help:warning>
+    </help:workflow>
+
+    <help:workflow xml:id="workflow-clean-rate" task="compact rate" option-refs="opt-pgn opt-output">
+      <help:title>Prepare a PGN and calculate ratings with Ordo</help:title>
+      <help:step ordinal="1"><help:command><![CDATA[.\ordoprep-win64.exe -p raw.pgn -Y aliases.csv --major-only -o rating-input.pgn]]></help:command></help:step>
+      <help:step ordinal="2"><help:command><![CDATA[.\ordo-win64.exe -p rating-input.pgn -o ratings.txt]]></help:command></help:step>
+      <help:note>The Ordo executable name and rating options vary by installation; consult Ordo's own manual.</help:note>
+    </help:workflow>
+  </help:workflows>
+
+  <help:topic xml:id="automation" kind="reference" audience="integrator">
+    <help:title>Automation, streams, and exit status</help:title>
+    <help:exit-status evidence-refs="source-main source-main2">
+      <help:status code="0" meaning="success">Includes help/version/license exits and successful group-analysis-only exits.</help:status>
+      <help:status code="nonzero" meaning="failure">Used for invalid options, incompatible switches, unreadable inputs, malformed recognized tags/results, empty usable input, output failures, limits, or memory failures.</help:status>
+    </help:exit-status>
+    <help:powershell-example><![CDATA[
+& .\ordoprep-win64.exe -q -p raw.pgn -o shrunk.pgn
+if ($LASTEXITCODE -ne 0) {
+    throw "Ordoprep failed with exit code $LASTEXITCODE"
+}
+]]></help:powershell-example>
+    <help:automation-guidance>
+      <help:item>Check <help:code>$LASTEXITCODE</help:code> after each invocation.</help:item>
+      <help:item>Write PGN with -o and capture console logs separately for predictable automation.</help:item>
+      <help:item>Create parent directories before invoking group split options.</help:item>
+      <help:item>Do not assume an existing output is current merely because the process started; verify exit status and output size.</help:item>
+      <help:item>For reproducibility, record executable version, SHA-256, command line, aliases, name lists, and ordered input manifest.</help:item>
+    </help:automation-guidance>
+  </help:topic>
+
+  <help:troubleshooting xml:id="troubleshooting">
+    <help:title>Troubleshooting</help:title>
+
+    <help:problem xml:id="problem-no-input" symptom="Need file name to proceed" related-refs="command-syntax opt-pgn opt-pgn-list opt-positional-input opt-stdin">
+      <help:cause>No -p, -P, positional path, or --stdin source was recognized.</help:cause>
+      <help:resolution>Supply at least one source; use -- before positional paths.</help:resolution>
+    </help:problem>
+
+    <help:problem xml:id="problem-read-pgn" symptom="Problems reading results from pgn file" related-refs="input-contract">
+      <help:cause>An input path could not be opened or PGN scanning failed.</help:cause>
+      <help:resolution>Check path spelling, quoting, permissions, and the first preceding parser message.</help:resolution>
+    </help:problem>
+
+    <help:problem xml:id="problem-empty" symptom="ERROR: Input file contains no games" related-refs="input-contract">
+      <help:cause>No complete, recognized White/Black/Result triple was collected, or selection left no active game.</help:cause>
+      <help:resolution>Verify exact tag capitalization, conventional tag lines, supported Result values, and include/exclude membership.</help:resolution>
+    </help:problem>
+
+    <help:problem xml:id="problem-result" symptom="PGN reading problems in Result tag" related-refs="field-result input-contract">
+      <help:cause>The Result tag is not one of 1-0, 0-1, 1/2-1/2, =-=, or *.</help:cause>
+      <help:resolution>Normalize malformed/alternative result strings in the source PGN.</help:resolution>
+    </help:problem>
+
+    <help:problem xml:id="problem-tag-line" symptom="Parsing error in line" related-refs="input-contract">
+      <help:cause>A recognized White, Black, or Result prefix lacked a closing quote-and-bracket sequence.</help:cause>
+      <help:resolution>Inspect the reported line for truncated or malformed PGN tag syntax.</help:resolution>
+    </help:problem>
+
+    <help:problem xml:id="problem-name-warning" symptom="WARNING (not matching name)" related-refs="opt-include opt-exclude opt-no-warnings opt-synonyms">
+      <help:cause>A participant-list entry did not exactly resolve to a loaded canonical name or alias.</help:cause>
+      <help:resolution>Correct case/spacing or add an alias. Use --no-warnings only after confirming unmatched names are intentional.</help:resolution>
+    </help:problem>
+
+    <help:problem xml:id="problem-pgn-contaminated" symptom="Output PGN contains progress text or timing lines" related-refs="output-contract opt-quiet opt-timelog opt-output">
+      <help:cause>Primary PGN and diagnostics were both written to standard output.</help:cause>
+      <help:resolution>Prefer -o FILE. Otherwise add --quiet and remove --timelog.</help:resolution>
+    </help:problem>
+
+    <help:problem xml:id="problem-empty-output-group" symptom="The -o file is empty after a successful group command" related-refs="constraint-group-early-exit opt-groups opt-group-games opt-group-players">
+      <help:cause>Group report/split mode exits before ordinary PGN output unless --major-only is active.</help:cause>
+      <help:resolution>Use the group artifact as the intended result, or run a second command for compact/major output.</help:resolution>
+    </help:problem>
+
+    <help:problem xml:id="problem-filter-not-applied" symptom="A participant filter had no effect during group splitting" related-refs="constraint-group-split-filter-trap">
+      <help:cause>The accepted command exited at the group-artifact stage before reaching filtering.</help:cause>
+      <help:resolution>Filter to an intermediate PGN first, then run group splitting on that PGN.</help:resolution>
+    </help:problem>
+
+    <help:problem xml:id="problem-groups-failed" symptom="Group connectivity: **FAILED**" related-refs="connectivity workflow-connectivity">
+      <help:cause>The active result graph contains more than one independently rateable component or only one-way interfaces.</help:cause>
+      <help:resolution>Inspect the report, extract --major-only, or add legitimate cross-group games; do not invent results merely to connect groups.</help:resolution>
+    </help:problem>
+
+    <help:problem xml:id="problem-no-group-files" symptom="No games in the group, file not saved" related-refs="opt-group-games opt-group-players">
+      <help:cause>The group has fewer than two participants, so it has no within-group game PGN.</help:cause>
+      <help:resolution>Use --group-players to retain a list of singleton groups.</help:resolution>
+    </help:problem>
+
+    <help:problem xml:id="problem-group-limit" symptom="Limit of group files reached" related-refs="opt-group-max">
+      <help:cause>The number of groups reached --group-max, default 1000.</help:cause>
+      <help:resolution>Increase --group-max if the additional artifacts are genuinely needed.</help:resolution>
+    </help:problem>
+
+    <help:problem xml:id="problem-switch-drift" symptom="-g 20 writes/tries to write a group report instead of filtering 20 games" related-refs="opt-min-games opt-groups">
+      <help:cause>The upstream README contains an obsolete example; in 0.9.9.8, -g requires a group-report filename and -M is minimum games.</help:cause>
+      <help:resolution>Use <help:code>-M 20</help:code> or <help:code>--min-games=20</help:code>.</help:resolution>
+    </help:problem>
+  </help:troubleshooting>
+
+  <help:glossary xml:id="glossary">
+    <help:title>Glossary</help:title>
+    <help:term xml:id="term-pgn">
+      <help:name>PGN</help:name>
+      <help:definition>Portable Game Notation. Ordoprep consumes only White, Black, and Result tags from it.</help:definition>
+      <help:see-also refs="input-contract output-contract"/>
+    </help:term>
+    <help:term xml:id="term-canonical-name">
+      <help:name>canonical name</help:name>
+      <help:definition>The first field of an alias row and the participant name written to output for that alias set.</help:definition>
+      <help:see-also refs="format-aliases opt-synonyms"/>
+    </help:term>
+    <help:term xml:id="term-performance">
+      <help:name>performance</help:name>
+      <help:definition>A participant's points divided by active games, expressed as a percentage.</help:definition>
+      <help:see-also refs="performance-filters opt-min-perf"/>
+    </help:term>
+    <help:term xml:id="term-perfect-score">
+      <help:name>perfect score</help:name>
+      <help:definition>Either 100% (no dropped points) or 0% (no earned points) in the current active game set.</help:definition>
+      <help:see-also refs="opt-no-perfects"/>
+    </help:term>
+    <help:term xml:id="term-encounter">
+      <help:name>encounter</help:name>
+      <help:definition>An aggregate of games for an ordered White/Black participant pairing used by connectivity analysis.</help:definition>
+      <help:see-also refs="connectivity"/>
+    </help:term>
+    <help:term xml:id="term-group">
+      <help:name>rating-connected group</help:name>
+      <help:definition>A component whose participants have sufficient two-way result connectivity to share a relative rating scale.</help:definition>
+      <help:see-also refs="connectivity opt-groups"/>
+    </help:term>
+    <help:term xml:id="term-major-group">
+      <help:name>major group</help:name>
+      <help:definition>Group 1: the connectivity group with the greatest number of participants, with deterministic alphabetical tie-breaking.</help:definition>
+      <help:see-also refs="opt-major-only"/>
+    </help:term>
+    <help:term xml:id="term-remaining">
+      <help:name>remaining games</help:name>
+      <help:definition>Decisive/drawn games explicitly marked ignored by membership or participant filtering, not a universal set complement.</help:definition>
+      <help:see-also refs="opt-remaining constraint-remaining-scope"/>
+    </help:term>
+    <help:term xml:id="term-ordo">
+      <help:name>Ordo</help:name>
+      <help:definition>The separate rating-calculation program for which Ordoprep commonly prepares compact, connected PGN input.</help:definition>
+      <help:external-link xlink:href="https://github.com/michiguel/Ordo">Official Ordo repository</help:external-link>
+    </help:term>
+  </help:glossary>
+
+  <help:relationship-graph xml:id="relationship-graph">
+    <help:title>Machine-readable topic and behavior relationships</help:title>
+    <help:relation type="implements" from-ref="opt-synonyms" to-ref="cap-normalize"/>
+    <help:relation type="precedes" from-ref="stage-load-aliases" to-ref="stage-read-pgn"/>
+    <help:relation type="precedes" from-ref="stage-membership" to-ref="stage-statistics"/>
+    <help:relation type="affects" from-ref="opt-synonyms" to-ref="opt-include"/>
+    <help:relation type="affects" from-ref="opt-synonyms" to-ref="opt-exclude"/>
+    <help:relation type="affects" from-ref="opt-synonyms" to-ref="connectivity"/>
+    <help:relation type="produces" from-ref="workflow-compact" to-ref="output-contract"/>
+    <help:relation type="consumed-by" from-ref="output-contract" to-ref="term-ordo"/>
+    <help:relation type="diagnoses" from-ref="opt-groups" to-ref="connectivity"/>
+    <help:relation type="selects" from-ref="opt-major-only" to-ref="term-major-group"/>
+    <help:relation type="partitions" from-ref="opt-group-games" to-ref="term-group"/>
+    <help:relation type="partitions" from-ref="opt-group-players" to-ref="term-group"/>
+    <help:relation type="limits" from-ref="opt-group-max" to-ref="opt-group-games"/>
+    <help:relation type="limits" from-ref="opt-group-max" to-ref="opt-group-players"/>
+    <help:relation type="captures-removals-from" from-ref="opt-remaining" to-ref="opt-include"/>
+    <help:relation type="captures-removals-from" from-ref="opt-remaining" to-ref="opt-exclude"/>
+    <help:relation type="captures-removals-from" from-ref="opt-remaining" to-ref="opt-no-perfects"/>
+    <help:relation type="captures-removals-from" from-ref="opt-remaining" to-ref="opt-min-perf"/>
+    <help:relation type="captures-removals-from" from-ref="opt-remaining" to-ref="opt-min-games"/>
+    <help:relation type="does-not-capture-complement-of" from-ref="opt-remaining" to-ref="opt-major-only"/>
+    <help:relation type="resolves" from-ref="workflow-connectivity" to-ref="problem-groups-failed"/>
+    <help:relation type="resolves" from-ref="constraint-clean-stdout" to-ref="problem-pgn-contaminated"/>
+    <help:relation type="documents-drift-between" from-ref="problem-switch-drift" to-ref="source-upstream-readme"/>
+    <help:relation type="documents-drift-between" from-ref="problem-switch-drift" to-ref="source-local-help"/>
+  </help:relationship-graph>
+
+  <help:index xml:id="index">
+    <help:index-entry term="aliases" refs="opt-synonyms opt-aliases format-aliases workflow-aliases term-canonical-name"/>
+    <help:index-entry term="automation" refs="automation constraint-clean-stdout"/>
+    <help:index-entry term="canonicalization" refs="cap-normalize opt-synonyms term-canonical-name"/>
+    <help:index-entry term="connected components" refs="connectivity term-group term-major-group"/>
+    <help:index-entry term="filtering" refs="performance-filters opt-include opt-exclude opt-no-perfects opt-min-perf opt-min-games"/>
+    <help:index-entry term="groups" refs="connectivity opt-groups opt-group-games opt-group-players opt-group-max opt-major-only"/>
+    <help:index-entry term="minimum games" refs="opt-min-games workflow-minimums problem-switch-drift"/>
+    <help:index-entry term="perfect scores" refs="opt-no-perfects term-perfect-score workflow-no-perfects"/>
+    <help:index-entry term="PGN" refs="term-pgn input-contract output-contract workflow-compact"/>
+    <help:index-entry term="remaining games" refs="opt-remaining term-remaining constraint-remaining-scope"/>
+    <help:index-entry term="standard input" refs="opt-stdin workflow-stdin"/>
+    <help:index-entry term="standard output" refs="output-contract constraint-clean-stdout problem-pgn-contaminated"/>
+    <help:index-entry term="synonyms" refs="opt-synonyms format-aliases workflow-aliases"/>
+  </help:index>
+
+  <help:sources xml:id="sources">
+    <help:title>Primary evidence and provenance</help:title>
+    <help:source xml:id="source-local-version" authority="primary" kind="local-executable-command">
+      <help:description>Local <help:code>ordoprep-win64.exe --version</help:code> output.</help:description>
+      <help:observed>ordoprep v0.9.9.8</help:observed>
+    </help:source>
+    <help:source xml:id="source-local-help" authority="primary" kind="local-executable-command">
+      <help:description>Local <help:code>ordoprep-win64.exe --help</help:code> and <help:code>--show-switches</help:code> output.</help:description>
+    </help:source>
+    <help:source xml:id="source-local-license" authority="primary" kind="local-executable-command">
+      <help:description>Local <help:code>ordoprep-win64.exe --license</help:code> output.</help:description>
+    </help:source>
+    <help:source xml:id="source-upstream-repository" authority="primary" kind="source-repository">
+      <help:description>Official Ordoprep repository.</help:description>
+      <help:link xlink:href="https://github.com/michiguel/Ordoprep">michiguel/Ordoprep</help:link>
+    </help:source>
+    <help:source xml:id="source-upstream-tag" authority="primary" kind="source-tag" revision="bacff14a6bd251f9ff156f7a585dca2bf5c2c597" date="2016-04-18">
+      <help:description>Upstream tag matching the local executable version.</help:description>
+      <help:link xlink:href="https://github.com/michiguel/Ordoprep/tree/v0.9.9.8">v0.9.9.8 source tree</help:link>
+    </help:source>
+    <help:source xml:id="source-upstream-readme" authority="primary-with-known-drift" kind="source-file">
+      <help:description>Upstream README; useful for workflows but contains an obsolete -g minimum-games example.</help:description>
+      <help:link xlink:href="https://github.com/michiguel/Ordoprep/blob/v0.9.9.8/README.md">README.md</help:link>
+    </help:source>
+    <help:source xml:id="source-main" authority="primary" kind="source-file">
+      <help:description>Option declarations, parsing, conflict checks, input ordering, output opening, and top-level exit behavior.</help:description>
+      <help:link xlink:href="https://github.com/michiguel/Ordoprep/blob/v0.9.9.8/main.c">main.c</help:link>
+    </help:source>
+    <help:source xml:id="source-main2" authority="primary" kind="source-file">
+      <help:description>Processing order, selection/filter algorithms, group artifact control flow, and PGN serialization.</help:description>
+      <help:link xlink:href="https://github.com/michiguel/Ordoprep/blob/v0.9.9.8/main2.c">main2.c</help:link>
+    </help:source>
+    <help:source xml:id="source-pgnget" authority="primary" kind="source-file">
+      <help:description>PGN scanner, result mapping, synonyms, input lists, and exact name matching.</help:description>
+      <help:link xlink:href="https://github.com/michiguel/Ordoprep/blob/v0.9.9.8/pgnget.c">pgnget.c</help:link>
+    </help:source>
+    <help:source xml:id="source-groups" authority="primary" kind="source-file">
+      <help:description>Connectivity components, sorting, reporting, group identifiers, and major-group selection.</help:description>
+      <help:link xlink:href="https://github.com/michiguel/Ordoprep/blob/v0.9.9.8/groups.c">groups.c</help:link>
+    </help:source>
+    <help:source xml:id="source-encount" authority="primary" kind="source-file">
+      <help:description>Aggregation of games into ordered White/Black encounters.</help:description>
+      <help:link xlink:href="https://github.com/michiguel/Ordoprep/blob/v0.9.9.8/encount.c">encount.c</help:link>
+    </help:source>
+    <help:source xml:id="source-timer" authority="primary" kind="source-file">
+      <help:description>Timing output destination and format.</help:description>
+      <help:link xlink:href="https://github.com/michiguel/Ordoprep/blob/v0.9.9.8/mytimer.c">mytimer.c</help:link>
+    </help:source>
+    <help:source xml:id="source-license" authority="primary" kind="source-file">
+      <help:description>GNU General Public License text distributed with Ordoprep.</help:description>
+      <help:link xlink:href="https://github.com/michiguel/Ordoprep/blob/v0.9.9.8/LICENSE.txt">LICENSE.txt</help:link>
+    </help:source>
+    <help:source-note>
+      Behavioral details in this help are based on the exact-version source and local command output.
+      Descriptions that go beyond the upstream README are implementation-derived and are intentionally connected to evidence-refs.
+    </help:source-note>
+  </help:sources>
+
+</help:manual>

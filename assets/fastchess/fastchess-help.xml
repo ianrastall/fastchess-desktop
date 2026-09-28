@@ -1,0 +1,605 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<help:manual xmlns:help="urn:ucerl:help:1" xmlns:xlink="http://www.w3.org/1999/xlink"
+  xml:id="fastchess-help" xml:lang="en" product="fastchess" product-version="alpha-1.8.2-260810" document-version="1.0.0">
+
+  <!-- Stable xml:id values identify subjects. ref/*-ref are single internal references;
+       refs/*-refs and evidence-refs are space-separated internal references. -->
+
+  <help:metadata xml:id="metadata">
+    <help:title>FastChess alpha 1.8.2: Complete Tournament, Engine, and Recovery Help</help:title>
+    <help:abstract>FastChess runs concurrent UCI tournaments, assigns EPD/PGN openings, maintains clocks and rules,
+      adjudicates games, reports Elo and SPRT statistics, writes PGN/final EPD, logs protocol traffic, and saves JSON
+      state. This manual documents the exact local Windows build plus behavior-matching source, including parser
+      boundaries, hidden aliases, scheduling, option validation, output ordering, recovery, and persistence omissions.</help:abstract>
+    <help:document-status>Verified against the executable, behavior-matching source, parser probes, and controlled tournaments.</help:document-status>
+    <help:last-verified date="2026-08-10" timezone="America/Chicago"/>
+    <help:local-artifact>
+      <help:path>D:\dev\uci\fastchess.exe</help:path><help:size unit="bytes">7625388</help:size>
+      <help:sha256>A95201243F866413588716CAC6903FEB8E6CB4FB24798597394940686BECB430</help:sha256>
+      <help:reported-version>fastchess alpha 1.8.2 260810</help:reported-version>
+      <help:capability name="zlib" available="false">This executable rejects compressed logs and .gz books.</help:capability>
+    </help:local-artifact>
+    <help:upstream-source commit="74deac23aadc6718fa0f8e24ac95d16392d79444" commit-date="2026-07-29" branch="master">
+      <help:explanation>The binary exhibits the hardened post-v1.8.2 parser. Its 260810 suffix is the compile-date
+        fallback used when Git metadata is absent, so it cannot identify an exact commit; the cited snapshot matches
+        its observed interface and behavior.</help:explanation>
+    </help:upstream-source>
+    <help:verification-notes>
+      <help:note>All four version spellings and both help spellings were probed; -h is rejected.</help:note>
+      <help:note>A two-game, concurrency-two tournament using the upstream dummy UCI engine produced color-reversed
+        results, PGN, final EPD, JSON state, and a trace protocol log; observed go clocks began at base plus increment.</help:note>
+      <help:note>A compressed-log probe failed with the explicit no-zlib diagnostic, establishing the local capability.</help:note>
+    </help:verification-notes>
+    <help:authors><help:author role="software-author">Disservin, Szil, PGG106, and contributors</help:author>
+      <help:author role="help-author">OpenAI Codex</help:author></help:authors>
+    <help:license-summary>MIT License; see <help:xref ref="source-license">the authoritative text</help:xref>.</help:license-summary>
+    <help:companion-documents>
+      <help:companion xlink:href="c-chess-cli-help.xml">Colocated c-chess-cli help.</help:companion>
+      <help:companion xlink:href="../proj/ucerl/pgn-extract-help.xml">PGN validation/transformation help.</help:companion>
+      <help:companion xlink:href="../proj/ucerl/ordoprep-help.xml">Rating-pool preparation help.</help:companion>
+      <help:companion xlink:href="../proj/ucerl/ordo-help.xml">Rating and uncertainty help.</help:companion>
+    </help:companion-documents>
+  </help:metadata>
+
+  <help:semantic-model xml:id="semantic-model">
+    <help:title>Semantic organization</help:title>
+    <help:description>The hierarchy is readable prose; IDs, typed parameters, defaults, constraints, workflows,
+      troubleshooting, evidence links, and relationship edges also form a machine-navigable knowledge graph.</help:description>
+    <help:authority>Observed executable behavior and matching source outrank abbreviated man-page wording.</help:authority>
+  </help:semantic-model>
+
+  <help:navigation xml:id="navigation">
+    <help:entry ref="quick-start" label="Quick start"/><help:entry ref="command-syntax" label="Grammar"/>
+    <help:entry ref="processing-pipeline" label="Pipeline"/><help:entry ref="tournament-model" label="Scheduling and colors"/>
+    <help:entry ref="engine-model" label="Engines and UCI"/><help:entry ref="time-controls" label="Time and limits"/>
+    <help:entry ref="opening-model" label="Opening books"/><help:entry ref="termination-model" label="Rules and adjudication"/>
+    <help:entry ref="statistics-model" label="Ratings and SPRT"/><help:entry ref="output-contract" label="Outputs"/>
+    <help:entry ref="persistence-model" label="State and recovery"/><help:entry ref="diagnostics-model" label="Diagnostics"/>
+    <help:entry ref="option-catalog" label="Complete options"/><help:entry ref="constraints" label="Constraints"/>
+    <help:entry ref="workflows" label="Recipes"/><help:entry ref="troubleshooting" label="Troubleshooting"/>
+    <help:entry ref="glossary" label="Glossary"/><help:entry ref="relationship-graph" label="Relationships"/>
+    <help:entry ref="sources" label="Evidence"/>
+  </help:navigation>
+
+  <help:topic xml:id="quick-start" kind="task">
+    <help:title>Quick start: paired, reproducible match</help:title>
+    <help:command xml:id="cmd-basic"><![CDATA[.\fastchess.exe `
+  -engine "cmd=C:\Engines\EngineA.exe" name=EngineA `
+  -engine "cmd=C:\Engines\EngineB.exe" name=EngineB `
+  -each tc=10+0.1 option.Threads=1 option.Hash=64 `
+  -openings file=openings.epd format=epd order=random start=1 `
+  -srand 20260810 -rounds 100 -repeat -concurrency 2 `
+  -resign movecount=3 score=600 -draw movenumber=34 movecount=8 score=20 `
+  -pgnout file=match.pgn append=false notation=san `
+  -config outname=match-state.json]]></help:command>
+    <help:result>One hundred openings, both colors per opening, at most two simultaneous games, fresh PGN, and resumable JSON.</help:result>
+    <help:caveats><help:item>Use an opening suite; otherwise all games use startpos.</help:item>
+      <help:item>PGN/EPD/log append by default; select append deliberately.</help:item>
+      <help:item>Concurrency multiplies engine processes, Threads, and Hash.</help:item>
+      <help:item>This local build has no zlib support.</help:item></help:caveats>
+  </help:topic>
+
+  <help:topic xml:id="command-syntax" kind="reference">
+    <help:title>Parser grammar and mental model</help:title>
+    <help:syntax><![CDATA[fastchess [OPTION [PARAMETER ...]]...
+fastchess --compliance ENGINE_PATH ["ENGINE ARGUMENT STRING"]]]></help:syntax>
+    <help:rules evidence-refs="source-cli-hpp source-cli-cpp source-main">
+      <help:rule>Canonical tournament options use one hyphen; only listed help/version aliases and --compliance use two.</help:rule>
+      <help:rule>An option consumes following tokens until a hyphen-led token; a hyphen followed by a digit is consumed as a negative number.</help:rule>
+      <help:rule>Key/value groups require nonempty key=value tokens. Only -pgnout and -epdout allow no tokens.</help:rule>
+      <help:rule>Spellings, keys, enum values, and UCI option names are case-sensitive; -testEnv has a capital E.</help:rule>
+      <help:rule>Quote each token containing spaces. Separately supplied -event/-site words are concatenated without spaces.</help:rule>
+      <help:rule>-each is deferred until all immediate options—including -config—finish; repeated -each parameters accumulate.</help:rule>
+      <help:rule>Numbers reject whitespace, trailing junk, non-finite floats, and overflow. Close misspellings may receive suggestions.</help:rule>
+    </help:rules>
+    <help:parameter-styles><help:style name="none">No parameter.</help:style><help:style name="single">Exactly one.</help:style>
+      <help:style name="key-value">At least one key=value.</help:style><help:style name="key-value-optional">Zero or more key=value.</help:style>
+      <help:style name="free">Zero or more raw tokens.</help:style></help:parameter-styles>
+  </help:topic>
+
+  <help:topic xml:id="processing-pipeline" kind="concept">
+    <help:title>Execution pipeline</help:title>
+    <help:stages>
+      <help:stage xml:id="stage-special" ordinal="1">Dispatch --compliance before normal parsing.</help:stage>
+      <help:stage xml:id="stage-parse" ordinal="2">Parse immediate options in order; loaded JSON replaces earlier accumulated state.</help:stage>
+      <help:stage xml:id="stage-each" ordinal="3">Apply deferred -each to every final engine.</help:stage>
+      <help:stage xml:id="stage-sanitize" ordinal="4">Normalize/validate schedule, concurrency, statistics, engines, names, and limits.</help:stage>
+      <help:stage xml:id="stage-services" ordinal="5">Open logging, seed RNG, initialize Syzygy, book, files, output, affinity, and saved stats.</help:stage>
+      <help:stage xml:id="stage-schedule" ordinal="6">Generate pairings lazily and enqueue up to concurrency jobs.</help:stage>
+      <help:stage xml:id="stage-uci" ordinal="7">Start/borrow engines; UCI, options, Chess960, ucinewgame, and readiness.</help:stage>
+      <help:stage xml:id="stage-game" ordinal="8">position/go/bestmove, clocks, legality, natural rules, and adjudication.</help:stage>
+      <help:stage xml:id="stage-record" ordinal="9">Write artifacts, update results, print intervals, test SPRT, and request next game.</help:stage>
+      <help:stage xml:id="stage-save" ordinal="10">Periodic/final JSON replacement, worker shutdown, and engine quit.</help:stage>
+    </help:stages>
+  </help:topic>
+
+  <help:topic xml:id="tournament-model" kind="concept">
+    <help:title>Topology, schedule size, openings, and colors</help:title>
+    <help:topology xml:id="topology-roundrobin" value="roundrobin" default="true">
+      <help:formula>pairings/round = N*(N-1)/2; total games = rounds*games*N*(N-1)/2</help:formula>
+      <help:description>Every unordered pair meets once per tournament round.</help:description></help:topology>
+    <help:topology xml:id="topology-gauntlet" value="gauntlet">
+      <help:formula>pairings/round = S*N-S*(S+1)/2; total games = rounds*games*pairings</help:formula>
+      <help:description>First S seeds meet later-index engines; seed pairs occur once and nonseeds do not meet.</help:description></help:topology>
+    <help:games-semantics evidence-refs="source-sanitize">Supported games/encounter is one or two. If games exceeds two,
+      sanitation first swaps games and rounds for legacy inverted configurations, then rejects if games still exceeds two.
+      Use explicit -rounds R -games 2.</help:games-semantics>
+    <help:color-policy evidence-refs="source-roundrobin">Global one-based even game IDs swap players unless -noswap;
+      -reverse then swaps every game again. games=2 balances each encounter. games=1 alternates globally, not per pair.</help:color-policy>
+    <help:penta-policy>Pentanomial statistics group the two games by pairing ID despite concurrent completion; penta is
+      disabled when games is not two or output is cutechess.</help:penta-policy>
+  </help:topic>
+
+  <help:topic xml:id="engine-model" kind="concept">
+    <help:title>Engine layering, validation, UCI, caching, and resources</help:title>
+    <help:subtopic xml:id="engine-layering"><help:title>Layering</help:title><help:description>Each -engine creates a record.
+      Deferred -each scalar tokens overwrite per-engine fields regardless of placement; option.NAME tokens append.
+      Names default to cmd stem; duplicates become NAME_2, NAME_3, because names key caches and scoreboards.</help:description></help:subtopic>
+    <help:subtopic xml:id="engine-validation"><help:title>Validation</help:title><help:description>At least two engines; each
+      needs tc, st, nodes, or plies/depth after layering. tc and st conflict; nodes/depth can accompany either. Windows
+      appends .exe when cmd has no period. Absolute or dir-prefixed paths are prechecked; bare relative commands are not.</help:description></help:subtopic>
+    <help:subtopic xml:id="uci-lifecycle"><help:title>UCI lifecycle</help:title><help:sequence>
+      <help:step>Start; uci; collect id/options through uciok.</help:step><help:step>Before every game send Threads first,
+        other configured options, UCI_Chess960=true when needed, ucinewgame, isready.</help:step>
+      <help:step>Each move: isready, position, isready, go, bestmove, isready.</help:step><help:step>At disposal send stop/quit, then force-kill if needed.</help:step>
+    </help:sequence></help:subtopic>
+    <help:subtopic xml:id="uci-option-validation"><help:title>UCI option validation</help:title><help:description>Exact
+      advertised names and declared check/spin/combo/string/button values are validated. Invalid/unknown values warn and
+      are skipped. Buttons accept only true and are sent without value; false is rejected in this build.</help:description></help:subtopic>
+    <help:subtopic xml:id="engine-cache"><help:title>Reuse/resources</help:title><help:description>Engines are cached by
+      configured name and leased exclusively. Parallel games can create multiple copies: budget about 2*concurrency
+      processes and corresponding Threads/Hash. restart=on deletes that engine after each game.</help:description></help:subtopic>
+  </help:topic>
+
+  <help:topic xml:id="time-controls" kind="concept">
+    <help:title>Clocks, search limits, margins, and deadlines</help:title>
+    <help:subtopic xml:id="tc-grammar"><help:syntax>tc=[MOVES/]TIME[+INC], TIME=SECONDS|MINUTES:SECONDS; st=SECONDS</help:syntax>
+      <help:description>Decimals and an s suffix on seconds components are accepted. Any hg is rejected. tc=inf/infinite
+        supplies no limit and therefore needs nodes/depth.</help:description><help:examples>10+0.1; 40/60+0.6; 1:30+0.5; st=0.25</help:examples></help:subtopic>
+    <help:subtopic xml:id="clock-accounting"><help:title>Accounting</help:title><help:description>A clock starts with base
+      plus one increment, so first go includes increment. Measured wall time is deducted. Below -timemargin is a loss;
+      otherwise negative becomes zero and increment is added. timemargin is milliseconds. st resets after each in-time move.</help:description>
+      <help:formula>bestmove threshold = current time left + timemargin + 100 ms</help:formula></help:subtopic>
+    <help:subtopic xml:id="search-limit-composition"><help:title>Composition</help:title><help:description>nodes and depth
+      can both be emitted and may accompany clock/movetime. If either nodes or depth exists, bestmove has no wall-clock
+      read timeout; a hung engine can block indefinitely even when a clock is also present.</help:description></help:subtopic>
+    <help:subtopic xml:id="protocol-deadlines"><help:title>Protocol deadlines</help:title><help:table>
+      <help:row operation="initial uciok" option-ref="opt-startup-ms" default-ms="10000"/>
+      <help:row operation="ucinewgame readiness" option-ref="opt-ucinewgame-ms" default-ms="60000"/>
+      <help:row operation="ordinary isready/read" option-ref="opt-ping-ms" default-ms="60000"/>
+    </help:table></help:subtopic>
+  </help:topic>
+
+  <help:topic xml:id="opening-model" kind="concept">
+    <help:title>EPD/PGN books, shuffle, offsets, and assignment</help:title>
+    <help:subtopic xml:id="opening-readers"><help:title>Readers</help:title><help:description>EPD mode retains every nonempty
+      line and parses it only when selected: a semicolon uses EPD parsing, otherwise FEN. Invalid selection is fatal.
+      PGN creates one opening/game, honors FEN, parses SAN, retains up to plies, and excludes a source game-ending move;
+      bad SAN leaves the successfully parsed prefix.</help:description><help:note>Lowercase .epd/.pgn infer format. Other
+      suffixes need format=. .gz requires zlib and is unavailable locally.</help:note></help:subtopic>
+    <help:subtopic xml:id="opening-order"><help:title>Order</help:title><help:sequence><help:step>Load all.</help:step>
+      <help:step>Optionally Fisher–Yates shuffle using -srand (default random).</help:step><help:step>Rotate start-1 plus completed-games/games on resume.</help:step>
+      <help:step>Retain at most rounds openings.</help:step><help:step>Cycle modulo retained size.</help:step></help:sequence></help:subtopic>
+    <help:subtopic xml:id="opening-assignment"><help:title>Assignment</help:title><help:description>Fetch one opening per
+      engine encounter and share it across games. With two engines/games=2 this is paired testing. With multiple engines,
+      every pair advances the book; a nominal tournament round does not share one opening across all pairs.</help:description></help:subtopic>
+    <help:subtopic xml:id="chess960"><help:title>FRC</help:title><help:description>fischerandom requires a book, uses Chess960
+      board parsing, sends UCI_Chess960=true when advertised, adds variant metadata, and suppresses orthodox ECO.</help:description></help:subtopic>
+  </help:topic>
+
+  <help:topic xml:id="termination-model" kind="concept">
+    <help:title>Termination priority and adjudication</help:title>
+    <help:priority evidence-refs="source-match-cpp source-match-hpp"><help:item ordinal="1">At turn start: checkmate,
+      stalemate, insufficient material, threefold repetition, fifty-move rule.</help:item><help:item ordinal="2">Syzygy,
+      resignation, draw-score, maximum moves.</help:item><help:item ordinal="3">Connection, missing/malformed/illegal
+      bestmove, time loss.</help:item><help:item ordinal="4">After a legal move update trackers; apply next turn.</help:item></help:priority>
+    <help:subtopic xml:id="draw-adjudication"><help:title>Draw score</help:title><help:description>Each centipawn report with
+      abs(score)&lt;=threshold increments a shared ply counter; mate/out-of-range/missing resets. halfmove clock zero also
+      resets. Requires 2*movecount reports and fullMoveNumber-1&gt;=movenumber. Scores are reporting-engine perspective.</help:description></help:subtopic>
+    <help:subtopic xml:id="resign-adjudication"><help:title>Resignation</help:title><help:description>One-sided mode requires
+      movecount losing reports for one color. twosided requires 2*movecount consecutive absolute decisive reports and
+      fires when the latest reporting engine is losing. Negative mate scores qualify.</help:description></help:subtopic>
+    <help:subtopic xml:id="maxmoves-adjudication"><help:title>Maximum moves</help:title><help:description>-maxmoves N draws
+      after 2*N engine-played plies, excluding PGN book moves and starting FEN counter. Use positive N; zero can draw immediately.</help:description></help:subtopic>
+    <help:subtopic xml:id="tb-adjudication"><help:title>Syzygy</help:title><help:description>-tb enables WDL; tbpieces limits
+      piece count (zero uses loaded availability); tbignore50 ignores rule 50; tbadjudicate filters WIN_LOSS/DRAW/BOTH.
+      Tablebase precedes heuristic adjudication but follows natural endings.</help:description></help:subtopic>
+    <help:termination-values><help:value label="normal"/><help:value label="adjudication"/><help:value label="time forfeit"/>
+      <help:value label="illegal move"/><help:value label="abandoned"/><help:value label="unterminated" note="normally omitted from artifacts/stats"/></help:termination-values>
+  </help:topic>
+
+  <help:topic xml:id="statistics-model" kind="concept">
+    <help:title>Ratings, paired statistics, and SPRT</help:title>
+    <help:subtopic xml:id="rating-reports"><help:title>Reports</help:title><help:description>Fastchess output gives logistic
+      Elo, nElo, 95% errors, LOS, score/draw ratio, and optionally pentanomial counts. Tiny/degenerate samples can show
+      NaN/infinity without a game failure. Cutechess output is WDL-oriented and disables penta.</help:description>
+      <help:note>ratinginterval counts pairs in penta mode, games otherwise; scoreinterval affects cute output. Zero disables periodic output.</help:note></help:subtopic>
+    <help:subtopic xml:id="sprt-model"><help:title>SPRT</help:title><help:description>Boundaries are log(beta/(1-alpha)) and
+      log((1-beta)/alpha). normalized (default) uses nElo, logistic regular Elo, bayesian BayesElo and disables penta.
+      H0 at/below lower; H1 at/above upper.</help:description><help:validation>elo0&lt;elo1; 0&lt;alpha,beta&lt;1;
+      alpha+beta&lt;1; model exact. Use exactly two engines though parser does not enforce it.</help:validation>
+      <help:concurrency-note>Boundary sets global stop; active games become interrupted rather than clean overshoot results.</help:concurrency-note></help:subtopic>
+  </help:topic>
+
+  <help:topic xml:id="output-contract" kind="concept">
+    <help:title>Console, PGN, final EPD, order, and CRC</help:title>
+    <help:subtopic xml:id="console-output"><help:description>fastchess is the default rich report; cutechess emits compatibility
+      game/score/Elo/SPRT lines and disables penta. Concurrent start/finish lines follow runtime order.</help:description></help:subtopic>
+    <help:subtopic xml:id="pgn-output"><help:title>PGN</help:title><help:description>-pgnout alone creates a timestamped name.
+      Core headers: Event, Site, Date, Round, White, Black, Result, conditional SetUp/FEN/Variant. Non-min adds engine
+      IDs/authors, duration/times, PlyCount, Termination, time control, ECO/opening. Round is pairing ID+1, not necessarily
+      nominal tournament round in multi-engine events.</help:description><help:comments>Non-min comments always include
+      reporting-engine score/depth/measured time; flags add nodes, seldepth, nps, hashfull, tbhits, PV, timeleft,
+      latency, and regex-matched lines. Score signs are mover perspective, not White-normalized.</help:comments>
+      <help:minimal>min=true removes diagnostic headers/comments but keeps core/setup/variant/moves/result.</help:minimal></help:subtopic>
+    <help:subtopic xml:id="epd-output"><help:title>Final EPD</help:title><help:description>One final legal position per recorded
+      game; stops before illegal move and includes hmvc/fmvn.</help:description></help:subtopic>
+    <help:subtopic xml:id="file-ordering"><help:title>Append/order</help:title><help:description>PGN/EPD append true by default;
+      false truncates fresh output. Writes are mutex-protected but not schedule-reordered, so concurrency yields
+      completion/write-lock order. Loaded stats force append despite false.</help:description></help:subtopic>
+    <help:subtopic xml:id="crc-output"><help:title>CRC32</help:title><help:description>-crc32 pgn=true starts from existing
+      bytes, updates each game, and prints cumulative checksum; it does not validate/deduplicate PGN.</help:description></help:subtopic>
+  </help:topic>
+
+  <help:topic xml:id="persistence-model" kind="concept">
+    <help:title>JSON state, resume, and engine-fault recovery</help:title>
+    <help:subtopic xml:id="state-saving"><help:title>Saving</help:title><help:description>Replace config_name every positive
+      autosaveinterval completed games and again at destruction. Zero/negative disables periodic only. JSON contains
+      most tournament fields, engines, and pair stats; replacement is not an atomic temporary-file rename.</help:description></help:subtopic>
+    <help:subtopic xml:id="state-resume"><help:title>Loading</help:title><help:description>-config file immediately replaces
+      configuration/engines/stats. Later immediate options override; deferred -each applies last. With two engines and
+      stats=true, result count offsets schedule/book and forces artifact append. More than two engines causes loaded
+      stats to be dropped.</help:description><help:warning>Changing engine identities, games, book, or seed while retaining stats can corrupt experiment continuity.</help:warning></help:subtopic>
+    <help:subtopic xml:id="state-omissions"><help:title>Not serialized</help:title><help:description>-testEnv, -strict,
+      explicit affinity CPU list, startup-ms, ucinewgame-ms, ping-ms, and tbadjudicate filter. Re-specify on resume;
+      tablebase filter otherwise returns to BOTH.</help:description></help:subtopic>
+    <help:subtopic xml:id="fault-recovery"><help:title>-recover differs from resume</help:title><help:description>Without
+      recover, stall/disconnect stops abnormally after state stats update but before that game's PGN/EPD write. With
+      recover, the loss is written/counted, unhealthy engines restart, and scheduling continues. Startup failures still stop.</help:description></help:subtopic>
+  </help:topic>
+
+  <help:topic xml:id="diagnostics-model" kind="concept">
+    <help:title>Logging, compliance, strict mode, PVs, latency, and affinity</help:title>
+    <help:subtopic xml:id="logging-model"><help:title>Logging</help:title><help:description>-log requires key=value;
+      defaults append=true, level=warn, realtime=true, engine=false. engine=true records UCI; realtime=false batches
+      search output until bestmove. Windows merges child stderr into stdout. compress=true fails locally (no zlib); a
+      zlib build creates FILE+timestamp+.gz and ignores append.</help:description></help:subtopic>
+    <help:subtopic xml:id="compliance-model"><help:title>Compliance</help:title><help:description>--compliance must be first,
+      takes engine path and at most one argument string, then checks startup/readiness, id name/author, new game,
+      startpos/FEN, timed go for colors/increments, bestmove, and integer info time/nps/score; info score is required.</help:description></help:subtopic>
+    <help:subtopic xml:id="strict-and-pv"><help:title>Strict/PV/latency</help:title><help:description>-strict globally stops on
+      runtime Logger warnings or worse. -check-mate-pvs checks legality, rule boundaries, mate length/end, and bestmove
+      agreement. -show-latency prints measured minus engine-reported time and may be negative.</help:description></help:subtopic>
+    <help:subtopic xml:id="affinity-model"><help:title>Affinity</help:title><help:description>-use-affinity discovers CPUs or
+      parses a list such as 3,5,7-11, binds tournament thread before child spawn and also binds process. Use only with
+      option.Threads=1 in this revision: the multi-thread-disable path is inconsistent and may bind a multi-thread engine to one CPU.</help:description></help:subtopic>
+  </help:topic>
+
+  <help:option-catalog xml:id="option-catalog">
+    <help:title>Complete accepted option and group-token catalog</help:title>
+    <help:category xml:id="category-general" name="General and special">
+      <help:option xml:id="opt-version" spelling="-version" param-style="none"><help:alias>--version</help:alias><help:alias>-v</help:alias><help:alias>--v</help:alias><help:summary>Print build string and exit.</help:summary></help:option>
+      <help:option xml:id="opt-help" spelling="-help" param-style="none"><help:alias>--help</help:alias><help:summary>Print generated help and exit; -h is absent.</help:summary></help:option>
+      <help:option xml:id="opt-compliance" spelling="--compliance" param-style="special"><help:syntax>--compliance ENGINE_PATH ["ARGUMENT STRING"]</help:syntax><help:summary>Run standalone UCI compliance checks.</help:summary></help:option>
+    </help:category>
+
+    <help:category xml:id="category-tournament" name="Tournament setup">
+      <help:option xml:id="opt-quick" spelling="-quick" param-style="key-value"><help:token key="cmd" cardinality="2"/><help:token key="book" cardinality="1"/><help:summary>Preset: tc=10+0.1, games=2, rounds=25000, random book, recover, draw 30/8/8, cute output, concurrency=max(1, hardware-2).</help:summary></help:option>
+      <help:option xml:id="opt-concurrency" spelling="-concurrency" param-style="single" default="1"><help:value type="integer"/><help:summary>Positive N workers; 0 means hardware threads; negative N means hardware-abs(N).</help:summary></help:option>
+      <help:option xml:id="opt-force-concurrency" spelling="-force-concurrency" param-style="none" default="false"><help:summary>Bypass hardware-thread upper bound.</help:summary></help:option>
+      <help:option xml:id="opt-rounds" spelling="-rounds" param-style="single" default="2"><help:value type="positive-integer"/><help:summary>Complete pairing cycles.</help:summary></help:option>
+      <help:option xml:id="opt-games" spelling="-games" param-style="single" default="2"><help:value domain="1|2"/><help:summary>Games per encounter/opening.</help:summary></help:option>
+      <help:option xml:id="opt-repeat" spelling="-repeat" param-style="free" default-when-present="2"><help:summary>Set games=2; one all-digit parameter N is also accepted but still sanitized.</help:summary></help:option>
+      <help:option xml:id="opt-sprt" spelling="-sprt" param-style="key-value"><help:token key="elo0" type="float"/><help:token key="elo1" type="float"/><help:token key="alpha" type="float"/><help:token key="beta" type="float"/><help:token key="model" domain="normalized|logistic|bayesian" default="normalized"/><help:summary>Enable sequential testing.</help:summary></help:option>
+      <help:option xml:id="opt-tournament" spelling="-tournament" param-style="single" default="roundrobin"><help:value domain="roundrobin|gauntlet"/><help:summary>Select topology.</help:summary></help:option>
+      <help:option xml:id="opt-seeds" spelling="-seeds" param-style="single" default="1"><help:value type="integer"/><help:summary>Leading gauntlet seeds.</help:summary></help:option>
+      <help:option xml:id="opt-variant" spelling="-variant" param-style="single" default="standard"><help:value domain="standard|fischerandom"/></help:option>
+      <help:option xml:id="opt-noswap" spelling="-noswap" param-style="none" default="false"><help:summary>Disable even-ID automatic swap.</help:summary></help:option>
+      <help:option xml:id="opt-reverse" spelling="-reverse" param-style="none" default="false"><help:summary>Swap every assignment after normal color policy.</help:summary></help:option>
+      <help:option xml:id="opt-wait" spelling="-wait" param-style="single" default="0"><help:value type="nonnegative-integer" unit="milliseconds"/></help:option>
+    </help:category>
+
+    <help:category xml:id="category-engine" name="Engine configuration">
+      <help:option xml:id="opt-engine" spelling="-engine" param-style="key-value" repeatable="true"><help:summary>Define one engine.</help:summary></help:option>
+      <help:option xml:id="opt-each" spelling="-each" param-style="key-value" repeatable="true" dispatch="deferred"><help:summary>Apply shared tokens after all immediate parsing.</help:summary></help:option>
+      <help:shared-tokens option-refs="opt-engine opt-each">
+        <help:token xml:id="engine-cmd" key="cmd" value="COMMAND" required-after-layering="true"/>
+        <help:token xml:id="engine-name" key="name" value="NAME"><help:summary>Defaults to command stem; duplicates gain _2, _3.</help:summary></help:token>
+        <help:token xml:id="engine-args" key="args" value="ARGUMENT-STRING"><help:summary>Raw child arguments; quote as one token.</help:summary></help:token>
+        <help:token xml:id="engine-tc" key="tc" value="[MOVES/]TIME[+INC]"/>
+        <help:token xml:id="engine-st" key="st" value="SECONDS"/>
+        <help:token xml:id="engine-timemargin" key="timemargin" value="MILLISECONDS" default="0"/>
+        <help:token xml:id="engine-nodes" key="nodes" value="N" default="0"/>
+        <help:token xml:id="engine-plies" key="plies" value="N" default="0"><help:alias>depth</help:alias></help:token>
+        <help:token xml:id="engine-restart" key="restart" value="off|on" default="off"/>
+        <help:token xml:id="engine-proto" key="proto" value="uci"/>
+        <help:token xml:id="engine-dir" key="dir" value="DIRECTORY"/>
+        <help:token xml:id="engine-option" key="option.NAME" value="VALUE" repeatable="true"/>
+      </help:shared-tokens>
+    </help:category>
+
+    <help:category xml:id="category-adjudication" name="Adjudication and rules">
+      <help:option xml:id="opt-draw" spelling="-draw" param-style="key-value"><help:token key="movenumber" default="0"/><help:token key="movecount" default="1"/><help:token key="score" default="0" unit="centipawns"/><help:summary>Enable draw-score rule.</help:summary></help:option>
+      <help:option xml:id="opt-resign" spelling="-resign" param-style="key-value"><help:token key="movecount" default="1"/><help:token key="score" default="0" unit="centipawns"/><help:token key="twosided" domain="false|true" default="false"/><help:summary>Enable resignation rule.</help:summary></help:option>
+      <help:option xml:id="opt-maxmoves" spelling="-maxmoves" param-style="single"><help:value type="positive-integer" unit="full moves"/></help:option>
+      <help:option xml:id="opt-tb" spelling="-tb" param-style="single"><help:value type="path-list" windows-separator=";" other-separator=":"/><help:summary>Enable Syzygy WDL.</help:summary></help:option>
+      <help:option xml:id="opt-tbpieces" spelling="-tbpieces" param-style="single" default="0"><help:value type="nonnegative-integer" unit="pieces"/></help:option>
+      <help:option xml:id="opt-tbignore50" spelling="-tbignore50" param-style="none" default="false"/>
+      <help:option xml:id="opt-tbadjudicate" spelling="-tbadjudicate" param-style="single" default="BOTH"><help:value domain="BOTH|WIN_LOSS|DRAW"/></help:option>
+    </help:category>
+
+    <help:category xml:id="category-openings" name="Opening books">
+      <help:option xml:id="opt-openings" spelling="-openings" param-style="key-value">
+        <help:token xml:id="opening-file" key="file" value="PATH"/><help:token xml:id="opening-format" key="format" domain="epd|pgn"/>
+        <help:token xml:id="opening-order-token" key="order" domain="sequential|random" default="sequential"/>
+        <help:token xml:id="opening-plies" key="plies" value="N" default="-1"/><help:token xml:id="opening-start" key="start" value="N" default="1"/>
+        <help:token xml:id="opening-policy" key="policy" value="round"><help:summary>Compatibility token; only round is accepted and adds no alternate policy.</help:summary></help:token>
+      </help:option>
+      <help:option xml:id="opt-srand" spelling="-srand" param-style="single" default="random"><help:value type="uint64"/><help:summary>Seed shuffle; saved in JSON.</help:summary></help:option>
+    </help:category>
+
+    <help:category xml:id="category-output" name="Output and reporting">
+      <help:option xml:id="opt-output" spelling="-output" param-style="key-value"><help:token key="format" domain="fastchess|cutechess" default="fastchess"/></help:option>
+      <help:option xml:id="opt-pgnout" spelling="-pgnout" param-style="key-value-optional"><help:summary>Enable PGN; empty group creates timestamped file.</help:summary>
+        <help:token key="file" default="fastchess_DATE_TIME.pgn"/><help:token key="notation" domain="san|lan|uci" default="san"/><help:token key="append" domain="false|true" default="true"/>
+        <help:token key="nodes" domain="false|true" default="false"/><help:token key="seldepth" domain="false|true" default="false"/><help:token key="nps" domain="false|true" default="false"/>
+        <help:token key="hashfull" domain="false|true" default="false"/><help:token key="tbhits" domain="false|true" default="false"/><help:token key="pv" domain="false|true" default="false"/>
+        <help:token key="timeleft" domain="false|true" default="false"/><help:token key="latency" domain="false|true" default="false"/><help:token key="min" domain="false|true" default="false"/>
+        <help:token key="match_line" value="REGEX" repeatable="true"/>
+      </help:option>
+      <help:option xml:id="opt-epdout" spelling="-epdout" param-style="key-value-optional"><help:token key="file" default="fastchess_DATE_TIME.epd"/><help:token key="append" domain="false|true" default="true"/></help:option>
+      <help:option xml:id="opt-event" spelling="-event" param-style="free" default="Fastchess Tournament"><help:summary>Quote spaces or separate words concatenate.</help:summary></help:option>
+      <help:option xml:id="opt-site" spelling="-site" param-style="free" default="?"><help:summary>Quote spaces or separate words concatenate.</help:summary></help:option>
+      <help:option xml:id="opt-ratinginterval" spelling="-ratinginterval" param-style="single" default="10"><help:value type="nonnegative-integer"/><help:summary>Zero disables periodic rating reports.</help:summary></help:option>
+      <help:option xml:id="opt-scoreinterval" spelling="-scoreinterval" param-style="single" default="1"><help:value type="nonnegative-integer"/><help:summary>Zero disables periodic cute score lines.</help:summary></help:option>
+      <help:option xml:id="opt-report" spelling="-report" param-style="key-value"><help:token key="penta" domain="false|true" default="true"/></help:option>
+      <help:option xml:id="opt-crc32" spelling="-crc32" param-style="key-value"><help:token key="pgn" domain="false|true" default="false"/></help:option>
+    </help:category>
+
+    <help:category xml:id="category-persistence" name="Persistence and recovery">
+      <help:option xml:id="opt-config" spelling="-config" param-style="key-value"><help:token key="file" value="PATH"/><help:token key="discard" value="true"><help:summary>Only literal true is accepted.</help:summary></help:token><help:token key="outname" default="config.json"/><help:token key="stats" default="true"><help:summary>Literal false drops loaded stats; any other value leaves them loaded.</help:summary></help:token><help:summary>Load/redirect/control JSON state; at least one token required.</help:summary></help:option>
+      <help:option xml:id="opt-recover" spelling="-recover" param-style="none" default="false"><help:summary>Count fault loss, restart unhealthy engine, continue.</help:summary></help:option>
+      <help:option xml:id="opt-autosaveinterval" spelling="-autosaveinterval" param-style="single" default="20"><help:value type="integer" unit="completed games"/><help:summary>At or below zero disables periodic save, not final save.</help:summary></help:option>
+    </help:category>
+
+    <help:category xml:id="category-diagnostics" name="Logging, testing, and runtime controls">
+      <help:option xml:id="opt-log" spelling="-log" param-style="key-value"><help:token key="file"/><help:token key="level" domain="trace|info|warn|err|fatal" default="warn"/><help:token key="append" domain="false|true" default="true"/><help:token key="compress" domain="false|true" default="false"/><help:token key="realtime" domain="false|true" default="true"/><help:token key="engine" domain="false|true" default="false"/></help:option>
+      <help:option xml:id="opt-use-affinity" spelling="-use-affinity" param-style="free" default="false"><help:syntax>-use-affinity [3,5,7-11]</help:syntax><help:summary>Only first free parameter is parsed.</help:summary></help:option>
+      <help:option xml:id="opt-check-mate-pvs" spelling="-check-mate-pvs" param-style="none" default="false"/>
+      <help:option xml:id="opt-show-latency" spelling="-show-latency" param-style="none" default="false"/>
+      <help:option xml:id="opt-testenv" spelling="-testEnv" param-style="none" default="false"><help:summary>OpenBench/Fishtest diagnostic separators.</help:summary></help:option>
+      <help:option xml:id="opt-strict" spelling="-strict" param-style="none" default="false"><help:summary>Stop on runtime warning or worse.</help:summary></help:option>
+      <help:option xml:id="opt-debug" spelling="-debug" param-style="none" usable="false"><help:summary>Always errors and directs user to -log.</help:summary></help:option>
+      <help:option xml:id="opt-startup-ms" spelling="-startup-ms" param-style="single" default="10000"><help:value type="uint64" unit="milliseconds"/></help:option>
+      <help:option xml:id="opt-ucinewgame-ms" spelling="-ucinewgame-ms" param-style="single" default="60000"><help:value type="uint64" unit="milliseconds"/></help:option>
+      <help:option xml:id="opt-ping-ms" spelling="-ping-ms" param-style="single" default="60000"><help:value type="uint64" unit="milliseconds"/></help:option>
+    </help:category>
+  </help:option-catalog>
+
+  <help:constraints xml:id="constraints">
+    <help:title>High-value constraints and interactions</help:title>
+    <help:rule xml:id="constraint-engine-count" severity="error" option-refs="opt-engine">At least two engines.</help:rule>
+    <help:rule xml:id="constraint-engine-limit" severity="error" option-refs="opt-engine opt-each">Every engine needs tc/st/nodes/depth after layering.</help:rule>
+    <help:rule xml:id="constraint-tc-st" severity="error" refs="engine-tc engine-st">tc and st conflict.</help:rule>
+    <help:rule xml:id="constraint-paired" severity="recommendation" option-refs="opt-games opt-repeat opt-report">Use games=2 for colors and penta.</help:rule>
+    <help:rule xml:id="constraint-positive" severity="recommendation" option-refs="opt-rounds opt-games opt-seeds opt-wait">Use positive schedule counts, valid seeds, and nonnegative wait; signed-to-unsigned conversions can surprise.</help:rule>
+    <help:rule xml:id="constraint-each-last" severity="warning" option-refs="opt-each opt-engine">-each scalars win regardless of placement.</help:rule>
+    <help:rule xml:id="constraint-resources" severity="warning" option-refs="opt-concurrency">Budget about 2*concurrency engine processes and multiplied Threads/Hash.</help:rule>
+    <help:rule xml:id="constraint-node-hang" severity="warning" refs="engine-nodes engine-plies">nodes/depth removes wall-clock bestmove deadline.</help:rule>
+    <help:rule xml:id="constraint-opening" severity="error" option-refs="opt-openings">Existing, nonempty, valid book; explicit format unless lowercase suffix infers.</help:rule>
+    <help:rule xml:id="constraint-frc" severity="error" option-refs="opt-variant opt-openings">FRC requires Chess960 book and UCI_Chess960 engines.</help:rule>
+    <help:rule xml:id="constraint-zlib" severity="error" option-refs="opt-log opt-openings">Local binary cannot compress or read .gz.</help:rule>
+    <help:rule xml:id="constraint-sprt" severity="recommendation" option-refs="opt-sprt opt-engine">Use exactly two engines and valid probability/Elo bounds.</help:rule>
+    <help:rule xml:id="constraint-bayesian" severity="warning" option-refs="opt-sprt opt-report">Bayesian SPRT disables penta.</help:rule>
+    <help:rule xml:id="constraint-append" severity="warning" option-refs="opt-pgnout opt-epdout opt-config">Choose append deliberately; loaded stats force it.</help:rule>
+    <help:rule xml:id="constraint-regex" severity="warning" option-refs="opt-pgnout">Prevalidate match_line regex; invalid regex can strand schedule progress.</help:rule>
+    <help:rule xml:id="constraint-resume" severity="warning" option-refs="opt-config">Re-specify JSON-omitted settings.</help:rule>
+    <help:rule xml:id="constraint-affinity" severity="warning" option-refs="opt-use-affinity">Use only with option.Threads=1 in this revision.</help:rule>
+    <help:rule xml:id="constraint-adjudication" severity="recommendation" option-refs="opt-draw opt-resign opt-maxmoves">Use positive move counts and conservative thresholds.</help:rule>
+  </help:constraints>
+
+  <help:workflows xml:id="workflows">
+    <help:title>Task-oriented recipes</help:title>
+    <help:workflow xml:id="workflow-smoke" goal="engine smoke test" option-refs="opt-engine opt-each opt-rounds opt-repeat opt-log">
+      <help:command><![CDATA[.\fastchess.exe -engine cmd=A.exe name=A -engine cmd=B.exe name=B -each nodes=10000 -rounds 1 -repeat -log file=smoke.log level=trace engine=true append=false]]></help:command>
+      <help:success>Two games finish with reversed colors; log shows uci/uciok, options, new game, position, go, bestmove.</help:success></help:workflow>
+    <help:workflow xml:id="workflow-openings" goal="reproducible paired openings" option-refs="opt-openings opt-srand opt-rounds opt-repeat">
+      <help:command><![CDATA[... -openings file=openings.epd format=epd order=random start=1 -srand 123456 -rounds 1000 -repeat]]></help:command>
+      <help:note>Preserve seed, start, book bytes, engine order, rounds, and games.</help:note></help:workflow>
+    <help:workflow xml:id="workflow-sprt" goal="two-engine SPRT" option-refs="opt-sprt opt-report opt-rounds opt-repeat">
+      <help:command><![CDATA[... -sprt elo0=0 elo1=2 alpha=0.05 beta=0.05 model=normalized -report penta=true -rounds 100000 -repeat]]></help:command>
+      <help:note>Use paired openings and a large maximum; the boundary normally stops earlier.</help:note></help:workflow>
+    <help:workflow xml:id="workflow-roundrobin" goal="multi-engine round robin" option-refs="opt-tournament opt-engine opt-rounds opt-repeat">
+      <help:command><![CDATA[.\fastchess.exe -tournament roundrobin -engine cmd=A.exe -engine cmd=B.exe -engine cmd=C.exe -each tc=30+0.3 -rounds 20 -repeat -concurrency 3]]></help:command>
+      <help:note>Three engines: 20*2*3 = 120 games.</help:note></help:workflow>
+    <help:workflow xml:id="workflow-gauntlet" goal="candidate gauntlet" option-refs="opt-tournament opt-seeds opt-engine">
+      <help:command><![CDATA[... -tournament gauntlet -seeds 1 -engine cmd=Candidate.exe -engine cmd=Opp1.exe -engine cmd=Opp2.exe -rounds 100 -repeat]]></help:command>
+      <help:note>Candidate meets both opponents; opponents do not meet.</help:note></help:workflow>
+    <help:workflow xml:id="workflow-rich-pgn" goal="diagnostic PGN/final positions" option-refs="opt-pgnout opt-epdout opt-crc32">
+      <help:command><![CDATA[... -pgnout file=games.pgn append=false notation=san nodes=true seldepth=true nps=true hashfull=true tbhits=true pv=true timeleft=true latency=true -epdout file=final.epd append=false -crc32 pgn=true]]></help:command></help:workflow>
+    <help:workflow xml:id="workflow-minimal-pgn" goal="compact rating PGN" option-refs="opt-pgnout">
+      <help:command><![CDATA[... -pgnout file=rating.pgn append=false notation=san min=true]]></help:command>
+      <help:note>Core/setup/variant/moves/result remain; diagnostic metadata/comments disappear.</help:note></help:workflow>
+    <help:workflow xml:id="workflow-resume" goal="resume two-engine state" option-refs="opt-config opt-each opt-strict">
+      <help:command><![CDATA[.\fastchess.exe -config file=match-state.json outname=match-state.json stats=true -each option.Threads=1 -strict -startup-ms 15000 -ping-ms 60000]]></help:command>
+      <help:note>First inspect loaded engine/book/output identity; re-specify omitted settings.</help:note></help:workflow>
+    <help:workflow xml:id="workflow-recover" goal="continue after engine faults" option-refs="opt-recover opt-log opt-autosaveinterval">
+      <help:command><![CDATA[... -recover -autosaveinterval 10 -log file=protocol.log level=trace engine=true realtime=false append=true]]></help:command>
+      <help:note>A fault remains a game loss; recovery restarts and proceeds.</help:note></help:workflow>
+    <help:workflow xml:id="workflow-compliance" goal="UCI preflight" option-refs="opt-compliance">
+      <help:command><![CDATA[.\fastchess.exe --compliance "C:\Engines\Engine.exe" "--network net.nnue --threads 1"]]></help:command></help:workflow>
+    <help:workflow xml:id="workflow-chess960" goal="Chess960" option-refs="opt-variant opt-openings">
+      <help:command><![CDATA[... -variant fischerandom -openings file=chess960.epd format=epd order=random -srand 960 -repeat]]></help:command>
+      <help:note>Both engines must advertise UCI_Chess960.</help:note></help:workflow>
+    <help:workflow xml:id="workflow-rate" goal="clean and rate" option-refs="opt-pgnout">
+      <help:step>Write stable PGN, optionally min=true.</help:step><help:step>Validate/normalize with pgn-extract.</help:step>
+      <help:step>Use Ordoprep if graph preparation is needed, then Ordo for ratings/uncertainties.</help:step></help:workflow>
+  </help:workflows>
+
+  <help:automation xml:id="automation">
+    <help:title>Automation contract</help:title>
+    <help:rule>Record executable/version/hash, full command, cwd, engine hashes, book hash, seed, and state filename.</help:rule>
+    <help:rule>Use absolute artifact paths or establish cwd; default PGN/EPD/config/log paths are relative.</help:rule>
+    <help:rule>Success means exit 0, expected completed count, and artifact checks; a parseable partial file is insufficient.</help:rule>
+    <help:rule>Capture stdout/stderr. Redirected Windows help may say “Failed to get console mode” yet exit 0.</help:rule>
+    <help:rule>Before resume, compare JSON engine/book/output identity and restore omitted options explicitly.</help:rule>
+    <help:rule>Do not copy JSON while FastChess may be replacing it unless the copy method is filesystem-consistent.</help:rule>
+  </help:automation>
+
+  <help:troubleshooting xml:id="troubleshooting">
+    <help:title>Troubleshooting by symptom</help:title>
+    <help:problem xml:id="trouble-h" symptom="-h unrecognized"><help:cause>No -h alias.</help:cause><help:resolution>Use -help or --help.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-swallowed" symptom="Value belongs to wrong option"><help:cause>Previous option consumes until next hyphen-led option.</help:cause><help:resolution>Restore missing option and quote intended tokens.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-keyvalue" symptom="expects key=value"><help:cause>Missing = or empty key/value/group.</help:cause><help:resolution>Use exact catalog; only pgnout/epdout may be empty.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-engine-count" symptom="Need at least two engines"><help:cause>Too few records after parsing/loading.</help:cause><help:resolution>Add two -engine groups or load valid config.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-limit" symptom="no TimeControl specified"><help:cause>No tc/st/nodes/depth after deferred -each.</help:cause><help:resolution>Supply a limit to every engine.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-tc-st" symptom="cannot use tc and st"><help:cause>Both rolling and fixed clocks set.</help:cause><help:resolution>Choose one; nodes/depth can remain.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-path" symptom="startup failure or binary absent"><help:cause>Bad cmd/dir/spacing/dependency/permission/args.</help:cause><help:resolution>Run --compliance and inspect trace engine log.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-option" symptom="UCI option not sent"><help:cause>Name absent/case mismatch or value invalid for advertised type/range.</help:cause><help:resolution>Log engine traffic and copy advertised declaration.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-button" symptom="button false rejected"><help:cause>Buttons accept only true.</help:cause><help:resolution>Use option.NAME=true to press; omit otherwise.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-hang" symptom="depth/node game waits forever"><help:cause>nodes/depth disables bestmove wall timeout.</help:cause><help:resolution>Fix/supervise engine; adding tc does not restore deadline while nodes/depth remains.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-time" symptom="unexpected time loss"><help:cause>Measured wall time exceeded clock+timemargin; info time is not authoritative.</help:cause><help:resolution>Reduce load/concurrency/logging, inspect latency, cautiously increase millisecond margin.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-concurrency" symptom="concurrency exceeds CPUs"><help:cause>Positive request above hardware.</help:cause><help:resolution>Reduce or knowingly force; budget processes/threads/hash.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-games" symptom="rounds/games swapped or game-limit error"><help:cause>games&gt;2 triggers legacy swap then recheck.</help:cause><help:resolution>Use -rounds R -games 2 explicitly.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-color" symptom="colors not paired"><help:cause>games=1, noswap/reverse, or global-ID assumption.</help:cause><help:resolution>Use games=2 without noswap; reverse only to invert all.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-format" symptom="Unknown opening format"><help:cause>No recognized suffix/format or no book; no-book emits a second format warning.</help:cause><help:resolution>Use file=... format=epd|pgn.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-opening" symptom="fatal invalid FEN/EPD"><help:cause>EPD lines parse only when selected.</help:cause><help:resolution>Validate every nonempty line beforehand.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-zlib" symptom="not compiled with zlib"><help:cause>Local build lacks zlib.</help:cause><help:resolution>Use uncompressed files or zlib build.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-sprt" symptom="SPRT configuration error"><help:cause>Bad bounds/model/probabilities.</help:cause><help:resolution>Two engines; e.g. elo0=0 elo1=2 alpha=0.05 beta=0.05 model=normalized.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-penta" symptom="penta disappears"><help:cause>games!=2, cute output, or bayesian model.</help:cause><help:resolution>Fast output, games=2, normalized/logistic—or accept WDL.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-nan" symptom="early NaN/infinity"><help:cause>Tiny/degenerate distribution has zero variance/denominator.</help:cause><help:resolution>Verify games; wait for varied sample before interpreting rating.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-log" symptom="no engine traffic in log"><help:cause>engine defaults false.</help:cause><help:resolution>level=trace engine=true, optionally realtime=false.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-strict" symptom="stops after warning"><help:cause>-strict promotes runtime warnings to stop.</help:cause><help:resolution>Fix warning or remove strict for exploration.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-regex" symptom="no further schedule progress with match_line"><help:cause>Invalid std::regex throws inside game; interrupted game is not counted/replaced.</help:cause><help:resolution>Prevalidate regex in one-round smoke test.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-append" symptom="append=false ignored"><help:cause>Loaded stats force append to protect history.</help:cause><help:resolution>Use stats=false/discard=true only for intentional new history.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-resume-setting" symptom="resumed option reverted"><help:cause>Timeout/diagnostic/CPU-list/TB-filter fields omitted from JSON.</help:cause><help:resolution>Re-specify after -config.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-multi-resume" symptom="multi-engine loaded stats disappear"><help:cause>Stats deliberately dropped for &gt;2 engines.</help:cause><help:resolution>Preserve PGN; do not rely on stats resume for multi-engine event.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-recover-pgn" symptom="fault result in state but absent PGN"><help:cause>Without recover, stop occurs before output write but after stats update.</help:cause><help:resolution>Use recover if fault losses should be written/continued; reconcile state and PGN.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-affinity" symptom="multi-thread engine uses one CPU"><help:cause>Current affinity disable path is inconsistent.</help:cause><help:resolution>Affinity only with option.Threads=1, or omit it.</help:resolution></help:problem>
+    <help:problem xml:id="trouble-order" symptom="PGN not numerical schedule order"><help:cause>Writes serialize but are not reordered.</help:cause><help:resolution>Sort downstream by metadata if required.</help:resolution></help:problem>
+  </help:troubleshooting>
+
+  <help:glossary xml:id="glossary">
+    <help:title>Glossary</help:title>
+    <help:term xml:id="term-encounter">
+      <help:name>encounter</help:name>
+      <help:definition>One engine pair, one opening, and games games.</help:definition>
+    </help:term>
+    <help:term xml:id="term-pairing">
+      <help:name>pairing ID</help:name>
+      <help:definition>Internal encounter identity; PGN Round is ID+1.</help:definition>
+    </help:term>
+    <help:term xml:id="term-round">
+      <help:name>tournament round</help:name>
+      <help:definition>One traversal of scheduled pairings.</help:definition>
+    </help:term>
+    <help:term xml:id="term-penta">
+      <help:name>pentanomial</help:name>
+      <help:definition>Two-game outcomes LL, LD, WL/DD, WD, WW.</help:definition>
+    </help:term>
+    <help:term xml:id="term-nelo">
+      <help:name>nElo</help:name>
+      <help:definition>Normalized Elo scaled by observed variance.</help:definition>
+    </help:term>
+    <help:term xml:id="term-los">
+      <help:name>LOS</help:name>
+      <help:definition>Likelihood of superiority.</help:definition>
+    </help:term>
+    <help:term xml:id="term-llr">
+      <help:name>LLR</help:name>
+      <help:definition>Log-likelihood ratio compared to SPRT bounds.</help:definition>
+    </help:term>
+    <help:term xml:id="term-margin">
+      <help:name>timemargin</help:name>
+      <help:definition>Allowed millisecond clock overrun.</help:definition>
+    </help:term>
+    <help:term xml:id="term-recover">
+      <help:name>recover</help:name>
+      <help:definition>Continue after counting a fault loss; not JSON resume.</help:definition>
+    </help:term>
+    <help:term xml:id="term-resume">
+      <help:name>resume</help:name>
+      <help:definition>Load state/stats and continue from completed count.</help:definition>
+    </help:term>
+    <help:term xml:id="term-epd">
+      <help:name>EPD</help:name>
+      <help:definition>FEN-derived position plus optional semicolon operations.</help:definition>
+    </help:term>
+    <help:term xml:id="term-frc">
+      <help:name>FRC</help:name>
+      <help:definition>Fischer Random Chess/Chess960.</help:definition>
+    </help:term>
+    <help:term xml:id="term-uci">
+      <help:name>UCI</help:name>
+      <help:definition>Universal Chess Interface, the sole engine protocol.</help:definition>
+    </help:term>
+  </help:glossary>
+
+  <help:relationship-graph xml:id="relationship-graph">
+    <help:title>Typed cross-topic relations</help:title>
+    <help:relation type="configures" from-ref="opt-each" to-ref="engine-layering"/><help:relation type="overrides" from-ref="opt-each" to-ref="opt-engine"/>
+    <help:relation type="conflicts" from-ref="engine-tc" to-ref="engine-st"/><help:relation type="disables-timeout" from-ref="engine-nodes" to-ref="search-limit-composition"/>
+    <help:relation type="disables-timeout" from-ref="engine-plies" to-ref="search-limit-composition"/><help:relation type="multiplies" from-ref="opt-concurrency" to-ref="engine-cache"/>
+    <help:relation type="selects" from-ref="opt-tournament" to-ref="topology-roundrobin"/><help:relation type="selects" from-ref="opt-tournament" to-ref="topology-gauntlet"/>
+    <help:relation type="parameterizes" from-ref="opt-seeds" to-ref="topology-gauntlet"/><help:relation type="balances" from-ref="opt-repeat" to-ref="opening-assignment"/>
+    <help:relation type="suppresses" from-ref="opt-noswap" to-ref="tournament-model"/><help:relation type="inverts" from-ref="opt-reverse" to-ref="tournament-model"/>
+    <help:relation type="seeds" from-ref="opt-srand" to-ref="opening-order"/><help:relation type="requires" from-ref="opt-variant" to-ref="constraint-frc"/>
+    <help:relation type="feeds" from-ref="opt-openings" to-ref="opening-assignment"/><help:relation type="precedes" from-ref="tb-adjudication" to-ref="resign-adjudication"/>
+    <help:relation type="precedes" from-ref="resign-adjudication" to-ref="draw-adjudication"/><help:relation type="precedes" from-ref="draw-adjudication" to-ref="maxmoves-adjudication"/>
+    <help:relation type="enables" from-ref="opt-report" to-ref="term-penta"/><help:relation type="evaluates" from-ref="opt-sprt" to-ref="term-llr"/>
+    <help:relation type="writes" from-ref="opt-pgnout" to-ref="pgn-output"/><help:relation type="writes" from-ref="opt-epdout" to-ref="epd-output"/>
+    <help:relation type="checksums" from-ref="opt-crc32" to-ref="pgn-output"/><help:relation type="loads" from-ref="opt-config" to-ref="state-resume"/>
+    <help:relation type="omits" from-ref="opt-config" to-ref="state-omissions"/><help:relation type="distinct-from" from-ref="opt-recover" to-ref="state-resume"/>
+    <help:relation type="controls" from-ref="opt-recover" to-ref="fault-recovery"/><help:relation type="records" from-ref="opt-log" to-ref="logging-model"/>
+    <help:relation type="preflights" from-ref="opt-compliance" to-ref="uci-lifecycle"/><help:relation type="promotes" from-ref="opt-strict" to-ref="strict-and-pv"/>
+    <help:relation type="diagnoses" from-ref="opt-check-mate-pvs" to-ref="strict-and-pv"/><help:relation type="binds" from-ref="opt-use-affinity" to-ref="engine-cache"/>
+  </help:relationship-graph>
+
+  <help:index xml:id="index">
+    <help:index-entry term="adjudication" refs="termination-model draw-adjudication resign-adjudication maxmoves-adjudication tb-adjudication"/>
+    <help:index-entry term="append" refs="file-ordering state-resume opt-pgnout opt-epdout opt-log"/>
+    <help:index-entry term="Chess960" refs="chess960 opt-variant constraint-frc workflow-chess960"/>
+    <help:index-entry term="colors" refs="tournament-model opt-noswap opt-reverse constraint-paired"/>
+    <help:index-entry term="compliance" refs="compliance-model opt-compliance workflow-compliance"/>
+    <help:index-entry term="concurrency" refs="opt-concurrency engine-cache constraint-resources affinity-model"/>
+    <help:index-entry term="recovery" refs="fault-recovery opt-recover workflow-recover trouble-recover-pgn"/>
+    <help:index-entry term="engine options" refs="engine-layering uci-option-validation engine-option opt-each"/>
+    <help:index-entry term="openings" refs="opening-model opening-order opening-assignment opt-openings opt-srand"/>
+    <help:index-entry term="PGN" refs="pgn-output file-ordering opt-pgnout workflow-rich-pgn workflow-minimal-pgn"/>
+    <help:index-entry term="resume" refs="persistence-model state-resume state-omissions workflow-resume"/>
+    <help:index-entry term="SPRT" refs="sprt-model opt-sprt workflow-sprt constraint-sprt"/>
+    <help:index-entry term="time" refs="time-controls tc-grammar clock-accounting search-limit-composition protocol-deadlines"/>
+    <help:index-entry term="zlib" refs="constraint-zlib logging-model trouble-zlib"/>
+  </help:index>
+
+  <help:sources xml:id="sources">
+    <help:title>Primary evidence</help:title>
+    <help:source xml:id="source-local" kind="local-binary" xlink:href="fastchess.exe">Version/hash/parser/capability/runtime verification.</help:source>
+    <help:source xml:id="source-repository" kind="source-repository" xlink:href="https://github.com/Disservin/fastchess/tree/74deac23aadc6718fa0f8e24ac95d16392d79444">Behavior-matching snapshot.</help:source>
+    <help:source xml:id="source-readme" kind="upstream-manual" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/README.md">Scope/build/examples.</help:source>
+    <help:source xml:id="source-man" kind="upstream-manual" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/man.md">Generated option reference.</help:source>
+    <help:source xml:id="source-main" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/main.cpp">Version/compliance dispatch.</help:source>
+    <help:source xml:id="source-cli-cpp" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/cli/cli.cpp">Handlers, tokens, aliases, presets, JSON load.</help:source>
+    <help:source xml:id="source-cli-hpp" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/cli/cli.hpp">Grammar/deferred dispatch/version.</help:source>
+    <help:source xml:id="source-sanitize" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/cli/sanitize.cpp">Validation/normalization/concurrency.</help:source>
+    <help:source xml:id="source-config" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/types/tournament.hpp">Defaults/serialized fields.</help:source>
+    <help:source xml:id="source-scheduler" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/matchmaking/tournament/schedule/base_scheduler.hpp">Pair/opening/round scheduling.</help:source>
+    <help:source xml:id="source-roundrobin" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/matchmaking/tournament/roundrobin/roundrobin.cpp">Colors/results/SPRT.</help:source>
+    <help:source xml:id="source-gauntlet" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/matchmaking/tournament/gauntlet/scheduler.hpp">Gauntlet formula.</help:source>
+    <help:source xml:id="source-tournament" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/matchmaking/tournament/base/tournament.cpp">Cache/files/save/recovery.</help:source>
+    <help:source xml:id="source-opening" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/game/book/opening_book.cpp">Shuffle/rotate/truncate/cycle.</help:source>
+    <help:source xml:id="source-epd-reader" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/game/book/epd_reader.cpp">EPD lines/compression.</help:source>
+    <help:source xml:id="source-pgn-reader" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/game/book/pgn_reader.cpp">PGN opening extraction.</help:source>
+    <help:source xml:id="source-match-cpp" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/matchmaking/match/match.cpp">Game loop/rules/faults/diagnostics.</help:source>
+    <help:source xml:id="source-match-hpp" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/matchmaking/match/match.hpp">Adjudication trackers.</help:source>
+    <help:source xml:id="source-time" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/game/timecontrol/timecontrol.cpp">Clock accounting.</help:source>
+    <help:source xml:id="source-uci" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/engine/uci_engine.cpp">UCI/go/options/readiness.</help:source>
+    <help:source xml:id="source-pgn-builder" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/game/pgn/pgn_builder.cpp">PGN contract.</help:source>
+    <help:source xml:id="source-sprt" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/matchmaking/sprt/sprt.cpp">Models/LLR/bounds.</help:source>
+    <help:source xml:id="source-logger" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/core/logger/logger.cpp">Logging/compression.</help:source>
+    <help:source xml:id="source-compliance" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/engine/compliance.hpp">Compliance sequence.</help:source>
+    <help:source xml:id="source-affinity" kind="source-code" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/app/src/affinity/affinity_manager.hpp">CPU affinity.</help:source>
+    <help:source xml:id="source-license" kind="license" xlink:href="https://github.com/Disservin/fastchess/blob/74deac23aadc6718fa0f8e24ac95d16392d79444/LICENSE">MIT text.</help:source>
+  </help:sources>
+
+</help:manual>
