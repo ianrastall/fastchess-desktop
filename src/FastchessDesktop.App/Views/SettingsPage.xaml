@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="FastchessDesktop.App.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    NavigationCacheMode="Required">
+
+    <ScrollViewer Padding="24,8,24,24">
+        <StackPanel Spacing="8" MaxWidth="900" HorizontalAlignment="Left">
+            <TextBlock Text="Settings" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       Text="Empty paths fall back to the tools bundled next to the application (tools\ and data\). Settings are saved when the window closes, or with the button below." />
+
+            <TextBlock Text="Programs and data" Style="{StaticResource SectionHeaderStyle}" />
+            <Grid ColumnSpacing="8" RowSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="fastchess" Style="{StaticResource FieldLabelStyle}" />
+                <TextBox Grid.Column="1" Text="{x:Bind ViewModel.FastchessPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="tools\fastchess\fastchess.exe" />
+                <Button Grid.Column="2" Content="..." Command="{x:Bind ViewModel.BrowseCommand}" CommandParameter="FastchessPath" />
+
+                <TextBlock Grid.Row="1" Text="Stockfish" Style="{StaticResource FieldLabelStyle}" />
+                <TextBox Grid.Row="1" Grid.Column="1" Text="{x:Bind ViewModel.StockfishPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="tools\stockfish\*.exe" />
+                <Button Grid.Row="1" Grid.Column="2" Content="..." Command="{x:Bind ViewModel.BrowseCommand}" CommandParameter="StockfishPath" />
+
+                <TextBlock Grid.Row="2" Text="Ordo" Style="{StaticResource FieldLabelStyle}" />
+                <TextBox Grid.Row="2" Grid.Column="1" Text="{x:Bind ViewModel.OrdoPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="tools\ordo\ordo-win64.exe" />
+                <Button Grid.Row="2" Grid.Column="2" Content="..." Command="{x:Bind ViewModel.BrowseCommand}" CommandParameter="OrdoPath" />
+
+                <TextBlock Grid.Row="3" Text="Ordoprep" Style="{StaticResource FieldLabelStyle}" />
+                <TextBox Grid.Row="3" Grid.Column="1" Text="{x:Bind ViewModel.OrdoprepPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="tools\ordoprep\ordoprep-win64.exe" />
+                <Button Grid.Row="3" Grid.Column="2" Content="..." Command="{x:Bind ViewModel.BrowseCommand}" CommandParameter="OrdoprepPath" />
+
+                <TextBlock Grid.Row="4" Text="pgn-extract" Style="{StaticResource FieldLabelStyle}" />
+                <TextBox Grid.Row="4" Grid.Column="1" Text="{x:Bind ViewModel.PgnExtractPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="tools\pgn-extract\pgn-extract.exe" />
+                <Button Grid.Row="4" Grid.Column="2" Content="..." Command="{x:Bind ViewModel.BrowseCommand}" CommandParameter="PgnExtractPath" />
+
+                <TextBlock Grid.Row="5" Text="Lichess openings TSV" Style="{StaticResource FieldLabelStyle}" />
+                <TextBox Grid.Row="5" Grid.Column="1" Text="{x:Bind ViewModel.OpeningsTsvPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="data\lichess-openings.tsv" />
+                <Button Grid.Row="5" Grid.Column="2" Content="..." Command="{x:Bind ViewModel.BrowseCommand}" CommandParameter="OpeningsTsvPath" />
+            </Grid>
+
+            <TextBlock Text="Analysis (Stockfish)" Style="{StaticResource SectionHeaderStyle}" />
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <NumberBox Header="Depth" Minimum="0" Width="120" SpinButtonPlacementMode="Compact" Value="{x:Bind ViewModel.AnalysisDepth, Mode=TwoWay}" />
+                <NumberBox Header="Time per position (ms, 0 = off)" Minimum="0" Width="220" Value="{x:Bind ViewModel.AnalysisMoveTimeMs, Mode=TwoWay}" />
+                <NumberBox Header="Threads" Minimum="1" Width="120" SpinButtonPlacementMode="Compact" Value="{x:Bind ViewModel.AnalysisThreads, Mode=TwoWay}" />
+                <NumberBox Header="Hash (MB)" Minimum="1" Width="140" Value="{x:Bind ViewModel.AnalysisHashMb, Mode=TwoWay}" />
+            </StackPanel>
+
+            <TextBlock Text="Ratings (Ordoprep and Ordo)" Style="{StaticResource SectionHeaderStyle}" />
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <NumberBox Header="Average or anchor rating" Width="180" Value="{x:Bind ViewModel.RatingAverage, Mode=TwoWay}" />
+                <TextBox Header="Anchor player (optional)" Width="260" Text="{x:Bind ViewModel.RatingAnchor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                <NumberBox Header="Simulations (error bars)" Minimum="0" Width="180" Value="{x:Bind ViewModel.RatingSimulations, Mode=TwoWay}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <CheckBox Content="Estimate White advantage" IsChecked="{x:Bind ViewModel.RatingWhiteAuto, Mode=TwoWay}" />
+                <CheckBox Content="Estimate draw rate" IsChecked="{x:Bind ViewModel.RatingDrawAuto, Mode=TwoWay}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <CheckBox VerticalAlignment="Bottom" Content="Run Ordoprep first" IsChecked="{x:Bind ViewModel.RatingRunOrdoprep, Mode=TwoWay}" />
+                <ComboBox Header="Ordoprep filter (only one is allowed)" Width="300" SelectedIndex="{x:Bind ViewModel.RatingOrdoprepFilterIndex, Mode=TwoWay}">
+                    <ComboBoxItem Content="None" />
+                    <ComboBoxItem Content="Remove perfect and zero scores (-d)" />
+                    <ComboBoxItem Content="Minimum games per player (-M)" />
+                    <ComboBoxItem Content="Largest connected group only" />
+                </ComboBox>
+                <NumberBox Header="Minimum games" Minimum="1" Width="140" Value="{x:Bind ViewModel.RatingMinGames, Mode=TwoWay}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <CheckBox Content="Write ratings into WhiteElo/BlackElo" IsChecked="{x:Bind ViewModel.RatingFillElo, Mode=TwoWay}" />
+                <CheckBox Content="Overwrite existing Elo tags" IsChecked="{x:Bind ViewModel.RatingOverwriteElo, Mode=TwoWay}" />
+            </StackPanel>
+
+            <TextBlock Text="Database table" Style="{StaticResource SectionHeaderStyle}" />
+            <NumberBox Header="Games per page" Minimum="10" Maximum="100000" Width="160" HorizontalAlignment="Left"
+                       Value="{x:Bind ViewModel.PageSize, Mode=TwoWay}" />
+
+            <TextBlock Text="About" Style="{StaticResource SectionHeaderStyle}" />
+            <TextBlock Text="{x:Bind ViewModel.NativeVersion}" IsTextSelectionEnabled="True" />
+            <TextBlock IsTextSelectionEnabled="True" TextWrapping="Wrap">
+                <Run Text="Data folder: " /><Run Text="{x:Bind ViewModel.DataDirectory}" />
+            </TextBlock>
+
+            <Button Style="{StaticResource AccentButtonStyle}" Content="Save settings now" Click="OnSaveClick" Margin="0,12,0,0" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

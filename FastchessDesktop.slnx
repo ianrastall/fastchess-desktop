@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FastchessDesktop.App/FastchessDesktop.App.csproj">
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="src/FastchessDesktop.Core/FastchessDesktop.Core.csproj" />
+    <Project Path="src/FastchessDesktop.ViewModels/FastchessDesktop.ViewModels.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FastchessDesktop.Core.Tests/FastchessDesktop.Core.Tests.csproj" />
+    <Project Path="tests/FastchessDesktop.ViewModels.Tests/FastchessDesktop.ViewModels.Tests.csproj" />
+  </Folder>
+</Solution>

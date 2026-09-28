@@ -401,3 +401,6 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Native build output (CMake presets)
+native/out/

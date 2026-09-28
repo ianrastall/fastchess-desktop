@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="FastchessDesktop.App.Views.DatabasePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:FastchessDesktop.ViewModels"
+    xmlns:models="using:FastchessDesktop.Core.Models"
+    xmlns:views="using:FastchessDesktop.App.Views"
+    NavigationCacheMode="Required">
+
+    <Grid Padding="16,8,16,16" RowSpacing="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Database file -->
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="New..." Command="{x:Bind ViewModel.NewDatabaseCommand}" />
+            <Button Content="Open..." Command="{x:Bind ViewModel.OpenDatabaseCommand}" />
+            <Button Content="Close" Command="{x:Bind ViewModel.CloseDatabaseCommand}" />
+            <AppBarSeparator />
+            <Button Content="Import PGN..." Command="{x:Bind ViewModel.ImportPgnCommand}" />
+            <CheckBox VerticalAlignment="Center" Content="Skip duplicates" IsChecked="{x:Bind ViewModel.SkipDuplicatesOnImport, Mode=TwoWay}" />
+            <Button Content="Refresh" Command="{x:Bind ViewModel.RefreshCommand}" />
+            <TextBlock VerticalAlignment="Center" Margin="12,0,0,0" Style="{StaticResource BodyStrongTextBlockStyle}"
+                       Text="{x:Bind ViewModel.Title, Mode=OneWay}" />
+        </StackPanel>
+
+        <!-- Tools -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+            <ComboBox VerticalAlignment="Center" MinWidth="200" SelectedIndex="{x:Bind ViewModel.ScopeIndex, Mode=TwoWay}"
+                      ToolTipService.ToolTip="Which games the tools below work on">
+                <ComboBoxItem Content="Selected games" />
+                <ComboBoxItem Content="All games matching the filter" />
+            </ComboBox>
+            <Button Content="Classify openings" Command="{x:Bind ViewModel.ClassifyOpeningsCommand}"
+                    ToolTipService.ToolTip="ECO, Opening and Variation from the Lichess openings (last matched position)" />
+            <CheckBox VerticalAlignment="Center" Content="Overwrite" MinWidth="0" IsChecked="{x:Bind ViewModel.OverwriteOpenings, Mode=TwoWay}" />
+            <Button Content="Fill results" Command="{x:Bind ViewModel.FillResultsCommand}"
+                    ToolTipService.ToolTip="Set Result for unfinished (*) games that end in mate, stalemate or a draw rule" />
+            <Button Content="Analyze" Command="{x:Bind ViewModel.AnalyzeCommand}"
+                    ToolTipService.ToolTip="Evaluate every position with Stockfish (depth and time in Settings)" />
+            <Button Content="Compute ratings" Command="{x:Bind ViewModel.ComputeRatingsCommand}"
+                    ToolTipService.ToolTip="Ordoprep and Ordo; ratings are stored and can fill WhiteElo/BlackElo" />
+
+            <DropDownButton Content="pgn-extract">
+                <DropDownButton.Flyout>
+                    <Flyout Placement="Bottom">
+                        <StackPanel Spacing="8" Width="380">
+                            <ComboBox Header="Operation" HorizontalAlignment="Stretch"
+                                      SelectedIndex="{x:Bind ViewModel.PgnExtractPresetIndex, Mode=TwoWay}">
+                                <ComboBoxItem Content="Classify openings (Lichess eco.pgn, -e)" />
+                                <ComboBoxItem Content="Remove duplicates (-D)" />
+                                <ComboBoxItem Content="Fix result tags, add PlyCount" />
+                                <ComboBoxItem Content="Custom arguments only" />
+                            </ComboBox>
+                            <TextBox Header="Additional arguments" FontFamily="{StaticResource MonoFont}"
+                                     Text="{x:Bind ViewModel.PgnExtractArguments, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            <ComboBox Header="Output" HorizontalAlignment="Stretch"
+                                      SelectedIndex="{x:Bind ViewModel.PgnExtractOutputIndex, Mode=TwoWay}">
+                                <ComboBoxItem Content="Import as new games" />
+                                <ComboBoxItem Content="Replace the games in scope" />
+                            </ComboBox>
+                            <Button Style="{StaticResource AccentButtonStyle}" Content="Run pgn-extract"
+                                    Command="{x:Bind ViewModel.RunPgnExtractCommand}" />
+                        </StackPanel>
+                    </Flyout>
+                </DropDownButton.Flyout>
+            </DropDownButton>
+
+            <DropDownButton Content="Export">
+                <DropDownButton.Flyout>
+                    <Flyout Placement="Bottom">
+                        <StackPanel Spacing="8" Width="260">
+                            <ComboBox Header="Format" HorizontalAlignment="Stretch" SelectedIndex="{x:Bind ViewModel.ExportFormatIndex, Mode=TwoWay}">
+                                <ComboBoxItem Content="PGN" />
+                                <ComboBoxItem Content="JSON (games and standings)" />
+                                <ComboBoxItem Content="XML (games and standings)" />
+                                <ComboBoxItem Content="Crosstable (text)" />
+                            </ComboBox>
+                            <Button Style="{StaticResource AccentButtonStyle}" Content="Export..." Command="{x:Bind ViewModel.ExportCommand}" />
+                            <Button Content="Save Lichess openings as eco.pgn..." Command="{x:Bind ViewModel.WriteEcoFileCommand}" />
+                        </StackPanel>
+                    </Flyout>
+                </DropDownButton.Flyout>
+            </DropDownButton>
+
+            <AppBarSeparator />
+            <Button Content="Delete selected" Command="{x:Bind ViewModel.DeleteSelectedCommand}" />
+        </StackPanel>
+
+        <!-- Filter and paging -->
+        <Grid Grid.Row="2" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="360" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox PlaceholderText="Filter by player, event, site, ECO or opening (Enter)"
+                     Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     KeyDown="OnSearchKeyDown" />
+            <Button Grid.Column="1" Content="Search" Command="{x:Bind ViewModel.SearchCommand}" />
+            <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="{x:Bind ViewModel.SelectionText, Mode=OneWay}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8">
+                <Button Content="Previous" Command="{x:Bind ViewModel.PreviousPageCommand}" />
+                <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.PageText, Mode=OneWay}" />
+                <Button Content="Next" Command="{x:Bind ViewModel.NextPageCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <Grid Grid.Row="3" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="400" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Game table -->
+            <Grid RowSpacing="0" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <!-- Column widths must match the item template below. Click a header to sort. -->
+                <Grid Padding="12,2" ColumnSpacing="4" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="56" />
+                        <ColumnDefinition Width="92" />
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="44" />
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="52" />
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="52" />
+                        <ColumnDefinition Width="64" />
+                        <ColumnDefinition Width="44" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="48" />
+                        <ColumnDefinition Width="32" />
+                    </Grid.ColumnDefinitions>
+                    <Button Style="{StaticResource TableHeaderButtonStyle}" Content="#"
+                            Command="{x:Bind ViewModel.SortCommand}" CommandParameter="Id" />
+                    <Button Grid.Column="1" Style="{StaticResource TableHeaderButtonStyle}" Content="Date"
+                            Command="{x:Bind ViewModel.SortCommand}" CommandParameter="Date" />
+                    <Button Grid.Column="2" Style="{StaticResource TableHeaderButtonStyle}" Content="Event"
+                            Command="{x:Bind ViewModel.SortCommand}" CommandParameter="Event" />
+                    <Button Grid.Column="3" Style="{StaticResource TableHeaderButtonStyle}" Content="Rd"
+                            Command="{x:Bind ViewModel.SortCommand}" CommandParameter="Round" />
+                    <Button Grid.Column="4" Style="{StaticResource TableHeaderButtonStyle}" Content="White"
+                            Command="{x:Bind ViewModel.SortCommand}" CommandParameter="White" />
+                    <Button Grid.Column="5" Style="{StaticResource TableHeaderButtonStyle}" Content="Elo"
+                            Command="{x:Bind ViewModel.SortCommand}" CommandParameter="WhiteElo" />
+                    <Button Grid.Column="6" Style="{StaticResource TableHeaderButtonStyle}" Content="Black"
+                            Command="{x:Bind ViewModel.SortCommand}" CommandParameter="Black" />
+                    <Button Grid.Column="7" Style="{StaticResource TableHeaderButtonStyle}" Content="Elo"
+                            Command="{x:Bind ViewModel.SortCommand}" CommandParameter="BlackElo" />
+                    <Button Grid.Column="8" Style="{StaticResource TableHeaderButtonStyle}" Content="Result"
+                            Command="{x:Bind ViewModel.SortCommand}" CommandParameter="Result" />
+                    <Button Grid.Column="9" Style="{StaticResource TableHeaderButtonStyle}" Content="ECO"
+                            Command="{x:Bind ViewModel.SortCommand}" CommandParameter="Eco" />
+                    <Button Grid.Column="10" Style="{StaticResource TableHeaderButtonStyle}" Content="Opening"
+                            Command="{x:Bind ViewModel.SortCommand}" CommandParameter="Opening" />
+                    <Button Grid.Column="11" Style="{StaticResource TableHeaderButtonStyle}" Content="Plies"
+                            Command="{x:Bind ViewModel.SortCommand}" CommandParameter="PlyCount" />
+                    <TextBlock Grid.Column="12" Text="An" FontWeight="SemiBold" VerticalAlignment="Center"
+                               ToolTipService.ToolTip="Engine analysis stored" />
+                </Grid>
+                <ListView
+                    x:Name="GamesList"
+                    Grid.Row="1"
+                    SelectionMode="Extended"
+                    ItemsSource="{x:Bind ViewModel.Games}"
+                    SelectionChanged="OnGamesSelectionChanged">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="MinHeight" Value="28" />
+                            <Setter Property="Padding" Value="12,0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="vm:GameRow">
+                            <Grid ColumnSpacing="4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="56" />
+                                    <ColumnDefinition Width="92" />
+                                    <ColumnDefinition Width="150" />
+                                    <ColumnDefinition Width="44" />
+                                    <ColumnDefinition Width="150" />
+                                    <ColumnDefinition Width="52" />
+                                    <ColumnDefinition Width="150" />
+                                    <ColumnDefinition Width="52" />
+                                    <ColumnDefinition Width="64" />
+                                    <ColumnDefinition Width="44" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="48" />
+                                    <ColumnDefinition Width="32" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{x:Bind IdText, Mode=OneWay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Grid.Column="1" Text="{x:Bind Date, Mode=OneWay}" />
+                                <TextBlock Grid.Column="2" Text="{x:Bind Event, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="3" Text="{x:Bind Round, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="4" Text="{x:Bind White, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="5" Text="{x:Bind WhiteElo, Mode=OneWay}" />
+                                <TextBlock Grid.Column="6" Text="{x:Bind Black, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="7" Text="{x:Bind BlackElo, Mode=OneWay}" />
+                                <TextBlock Grid.Column="8" Text="{x:Bind Result, Mode=OneWay}" />
+                                <TextBlock Grid.Column="9" Text="{x:Bind Eco, Mode=OneWay}" />
+                                <TextBlock Grid.Column="10" Text="{x:Bind Opening, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="11" Text="{x:Bind Plies, Mode=OneWay}" />
+                                <TextBlock Grid.Column="12" Text="{x:Bind Analysis, Mode=OneWay}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+
+            <!-- Selected game, ratings, activity -->
+            <Pivot Grid.Column="1">
+                <PivotItem Header="Game">
+                    <ScrollViewer Margin="0,8,0,0">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Select one game to edit its tags." TextWrapping="Wrap"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.SelectedTags}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:TagViewModel">
+                                        <Grid ColumnSpacing="8" Margin="0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="110" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{x:Bind Name}" Style="{StaticResource FieldLabelStyle}" TextTrimming="CharacterEllipsis" />
+                                            <TextBox Grid.Column="1" Text="{x:Bind Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button Style="{StaticResource AccentButtonStyle}" Content="Save tags" Command="{x:Bind ViewModel.SaveTagsCommand}" />
+
+                            <TextBlock Text="Add a tag" Style="{StaticResource SectionHeaderStyle}" />
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox PlaceholderText="Name" Text="{x:Bind ViewModel.NewTagName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBox Grid.Column="1" PlaceholderText="Value" Text="{x:Bind ViewModel.NewTagValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Grid.Column="2" Content="Add" Command="{x:Bind ViewModel.AddTagCommand}" />
+                            </Grid>
+
+                            <TextBlock Text="Moves" Style="{StaticResource SectionHeaderStyle}" />
+                            <TextBlock Text="{x:Bind ViewModel.SelectedMoves, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                                       FontFamily="{StaticResource MonoFont}" />
+                            <TextBlock Text="Analysis" Style="{StaticResource SectionHeaderStyle}" />
+                            <TextBlock Text="{x:Bind ViewModel.SelectedAnalysis, Mode=OneWay}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </ScrollViewer>
+                </PivotItem>
+                <PivotItem Header="Ratings">
+                    <ListView ItemsSource="{x:Bind ViewModel.Ratings}" SelectionMode="None" Margin="0,8,0,0">
+                        <ListView.Header>
+                            <Grid Padding="12,0" ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="64" />
+                                    <ColumnDefinition Width="56" />
+                                    <ColumnDefinition Width="56" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Player" FontWeight="SemiBold" />
+                                <TextBlock Grid.Column="1" Text="Rating" FontWeight="SemiBold" />
+                                <TextBlock Grid.Column="2" Text="+/-" FontWeight="SemiBold" />
+                                <TextBlock Grid.Column="3" Text="Games" FontWeight="SemiBold" />
+                            </Grid>
+                        </ListView.Header>
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="models:PlayerRating">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="64" />
+                                        <ColumnDefinition Width="56" />
+                                        <ColumnDefinition Width="56" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{x:Bind Player}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="1" Text="{x:Bind views:DatabasePage.Format(Rating)}" />
+                                    <TextBlock Grid.Column="2" Text="{x:Bind views:DatabasePage.FormatError(Error)}" />
+                                    <TextBlock Grid.Column="3" Text="{x:Bind views:DatabasePage.FormatCount(Played)}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </PivotItem>
+                <PivotItem Header="Activity">
+                    <views:LogPanel Log="{x:Bind ViewModel.Log}" Margin="0,8,0,0" />
+                </PivotItem>
+            </Pivot>
+        </Grid>
+
+        <!-- Busy indicator -->
+        <Grid Grid.Row="4" ColumnSpacing="12" Visibility="{x:Bind ViewModel.IsBusy, Mode=OneWay}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="4">
+                <ProgressBar IsIndeterminate="{x:Bind ViewModel.BusyIndeterminate, Mode=OneWay}"
+                             Value="{x:Bind ViewModel.BusyProgress, Mode=OneWay}" Maximum="100" />
+                <TextBlock Text="{x:Bind ViewModel.BusyText, Mode=OneWay}" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="Cancel" Command="{x:Bind ViewModel.CancelBusyCommand}" />
+        </Grid>
+    </Grid>
+</Page>

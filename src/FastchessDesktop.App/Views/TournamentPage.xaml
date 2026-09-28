@@ -1,0 +1,402 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="FastchessDesktop.App.Views.TournamentPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:FastchessDesktop.ViewModels"
+    xmlns:views="using:FastchessDesktop.App.Views"
+    NavigationCacheMode="Required">
+
+    <Grid Padding="16,8,16,16" ColumnSpacing="16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="600" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Configuration -->
+        <ScrollViewer Padding="0,0,12,0">
+            <StackPanel Spacing="8">
+
+                <Expander Header="Engines" IsExpanded="True" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                          IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}">
+                    <Grid ColumnSpacing="12" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="200" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Orientation="Horizontal" Spacing="4" Grid.ColumnSpan="2">
+                            <Button Content="Add engine..." Command="{x:Bind ViewModel.AddEngineCommand}" />
+                            <Button Content="Duplicate" Command="{x:Bind ViewModel.DuplicateEngineCommand}" />
+                            <Button Content="Remove" Command="{x:Bind ViewModel.RemoveEngineCommand}" />
+                        </StackPanel>
+
+                        <ListView Grid.Row="1" MinHeight="160" MaxHeight="320"
+                                  ItemsSource="{x:Bind ViewModel.Engines}"
+                                  SelectedItem="{x:Bind ViewModel.SelectedEngine, Mode=TwoWay}"
+                                  BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="vm:EngineViewModel">
+                                    <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+
+                        <StackPanel Grid.Row="1" Grid.Column="1" Spacing="8">
+                            <TextBox Header="Name (defaults to the file name)"
+                                     Text="{x:Bind ViewModel.SelectedEngine.Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            <Grid ColumnSpacing="4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Header="Executable"
+                                         Text="{x:Bind ViewModel.SelectedEngine.Command, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Grid.Column="1" VerticalAlignment="Bottom" Content="..."
+                                        Command="{x:Bind ViewModel.BrowseEngineCommandCommand}" />
+                            </Grid>
+                            <TextBox Header="Arguments"
+                                     Text="{x:Bind ViewModel.SelectedEngine.Arguments, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBox Header="Working directory (optional)"
+                                     Text="{x:Bind ViewModel.SelectedEngine.WorkingDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            <TextBox Header="UCI options, one Name=Value per line"
+                                     Text="{x:Bind ViewModel.SelectedEngine.OptionsText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     AcceptsReturn="True" TextWrapping="Wrap" Height="96"
+                                     FontFamily="{StaticResource MonoFont}" />
+                        </StackPanel>
+                    </Grid>
+                </Expander>
+
+                <Expander Header="Schedule and limits" IsExpanded="True" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                          IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}">
+                    <Grid ColumnSpacing="12" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <ComboBox Header="Tournament" HorizontalAlignment="Stretch"
+                                  SelectedIndex="{x:Bind ViewModel.TournamentTypeIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="Round robin" />
+                            <ComboBoxItem Content="Gauntlet" />
+                        </ComboBox>
+                        <NumberBox Grid.Column="1" Header="Gauntlet seeds" Minimum="1" SpinButtonPlacementMode="Compact"
+                                   Value="{x:Bind ViewModel.Seeds, Mode=TwoWay}" />
+                        <NumberBox Grid.Column="2" Header="Rounds" Minimum="1" SpinButtonPlacementMode="Compact"
+                                   Value="{x:Bind ViewModel.Rounds, Mode=TwoWay}" />
+
+                        <NumberBox Grid.Row="1" Header="Games per encounter" Minimum="1" Maximum="2" SpinButtonPlacementMode="Compact"
+                                   Value="{x:Bind ViewModel.GamesPerEncounter, Mode=TwoWay}" />
+                        <NumberBox Grid.Row="1" Grid.Column="1" Header="Concurrency (0 = all threads)" SpinButtonPlacementMode="Compact"
+                                   Value="{x:Bind ViewModel.Concurrency, Mode=TwoWay}" />
+                        <CheckBox Grid.Row="1" Grid.Column="2" VerticalAlignment="Bottom" Content="Force concurrency"
+                                  IsChecked="{x:Bind ViewModel.ForceConcurrency, Mode=TwoWay}" />
+
+                        <ComboBox Grid.Row="2" Header="Limit" HorizontalAlignment="Stretch"
+                                  SelectedIndex="{x:Bind ViewModel.LimitKindIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="Time control (tc)" />
+                            <ComboBoxItem Content="Time per move (st)" />
+                            <ComboBoxItem Content="Nodes" />
+                            <ComboBoxItem Content="Depth" />
+                        </ComboBox>
+                        <TextBox Grid.Row="2" Grid.Column="1" Header="[moves/]seconds[+inc]"
+                                 Text="{x:Bind ViewModel.TimeControl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Visibility="{x:Bind ViewModel.IsTimeControlLimit, Mode=OneWay}" />
+                        <NumberBox Grid.Row="2" Grid.Column="1" Header="Seconds per move" Minimum="0" SmallChange="0.1"
+                                   SpinButtonPlacementMode="Compact" Value="{x:Bind ViewModel.MoveTimeSeconds, Mode=TwoWay}"
+                                   Visibility="{x:Bind ViewModel.IsMoveTimeLimit, Mode=OneWay}" />
+                        <NumberBox Grid.Row="2" Grid.Column="1" Header="Nodes per move" Minimum="1"
+                                   Value="{x:Bind ViewModel.Nodes, Mode=TwoWay}"
+                                   Visibility="{x:Bind ViewModel.IsNodesLimit, Mode=OneWay}" />
+                        <NumberBox Grid.Row="2" Grid.Column="1" Header="Depth" Minimum="1" SpinButtonPlacementMode="Compact"
+                                   Value="{x:Bind ViewModel.Depth, Mode=TwoWay}"
+                                   Visibility="{x:Bind ViewModel.IsDepthLimit, Mode=OneWay}" />
+                        <NumberBox Grid.Row="2" Grid.Column="2" Header="Time margin (ms)" Minimum="0" SpinButtonPlacementMode="Compact"
+                                   Value="{x:Bind ViewModel.TimeMarginMs, Mode=TwoWay}" />
+
+                        <NumberBox Grid.Row="3" Header="Threads per engine (0 = unset)" Minimum="0" SpinButtonPlacementMode="Compact"
+                                   Value="{x:Bind ViewModel.Threads, Mode=TwoWay}" />
+                        <NumberBox Grid.Row="3" Grid.Column="1" Header="Hash MB per engine (0 = unset)" Minimum="0" SpinButtonPlacementMode="Compact"
+                                   Value="{x:Bind ViewModel.HashMb, Mode=TwoWay}" />
+                    </Grid>
+                </Expander>
+
+                <Expander Header="Openings" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                          IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}">
+                    <Grid ColumnSpacing="12" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid Grid.ColumnSpan="3" ColumnSpacing="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Header="Opening book (EPD or PGN; empty = start position)"
+                                     Text="{x:Bind ViewModel.OpeningsFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            <Button Grid.Column="1" VerticalAlignment="Bottom" Content="..." Command="{x:Bind ViewModel.BrowseOpeningsCommand}" />
+                        </Grid>
+                        <ComboBox Grid.Row="1" Header="Format" HorizontalAlignment="Stretch"
+                                  SelectedIndex="{x:Bind ViewModel.OpeningsFormatIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="EPD" />
+                            <ComboBoxItem Content="PGN" />
+                        </ComboBox>
+                        <ComboBox Grid.Row="1" Grid.Column="1" Header="Order" HorizontalAlignment="Stretch"
+                                  SelectedIndex="{x:Bind ViewModel.OpeningsOrderIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="Sequential" />
+                            <ComboBoxItem Content="Random" />
+                        </ComboBox>
+                        <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                            <NumberBox Header="PGN plies (0 = all)" Minimum="0" Width="84" Value="{x:Bind ViewModel.OpeningPlies, Mode=TwoWay}" />
+                            <NumberBox Header="Start" Minimum="1" Width="72" Value="{x:Bind ViewModel.OpeningStart, Mode=TwoWay}" />
+                        </StackPanel>
+                    </Grid>
+                </Expander>
+
+                <Expander Header="Adjudication" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                          IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}">
+                    <Grid ColumnSpacing="12" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <CheckBox VerticalAlignment="Bottom" Content="Draw" IsChecked="{x:Bind ViewModel.DrawAdjudication, Mode=TwoWay}" />
+                        <NumberBox Grid.Column="1" Header="After move" Value="{x:Bind ViewModel.DrawMoveNumber, Mode=TwoWay}" />
+                        <NumberBox Grid.Column="2" Header="For moves" Value="{x:Bind ViewModel.DrawMoveCount, Mode=TwoWay}" />
+                        <NumberBox Grid.Column="3" Header="Within cp" Value="{x:Bind ViewModel.DrawScore, Mode=TwoWay}" />
+
+                        <CheckBox Grid.Row="1" VerticalAlignment="Bottom" Content="Resign" IsChecked="{x:Bind ViewModel.ResignAdjudication, Mode=TwoWay}" />
+                        <NumberBox Grid.Row="1" Grid.Column="1" Header="For moves" Value="{x:Bind ViewModel.ResignMoveCount, Mode=TwoWay}" />
+                        <NumberBox Grid.Row="1" Grid.Column="2" Header="Beyond cp" Value="{x:Bind ViewModel.ResignScore, Mode=TwoWay}" />
+                        <CheckBox Grid.Row="1" Grid.Column="3" VerticalAlignment="Bottom" Content="Two-sided"
+                                  IsChecked="{x:Bind ViewModel.ResignTwoSided, Mode=TwoWay}" />
+
+                        <NumberBox Grid.Row="2" Header="Max moves (0 = off)" Minimum="0" Value="{x:Bind ViewModel.MaxMoves, Mode=TwoWay}" />
+                        <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Header="Syzygy paths (; separated)"
+                                 Text="{x:Bind ViewModel.TablebasePaths, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <NumberBox Grid.Row="2" Grid.Column="3" Header="TB pieces" Minimum="0" Value="{x:Bind ViewModel.TablebasePieces, Mode=TwoWay}" />
+                    </Grid>
+                </Expander>
+
+                <Expander Header="SPRT" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                          IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}">
+                    <Grid ColumnSpacing="12" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <CheckBox VerticalAlignment="Bottom" Content="Enable SPRT (two engines)" IsChecked="{x:Bind ViewModel.Sprt, Mode=TwoWay}" />
+                        <NumberBox Grid.Column="1" Header="elo0" SmallChange="0.5" Value="{x:Bind ViewModel.SprtElo0, Mode=TwoWay}" />
+                        <NumberBox Grid.Column="2" Header="elo1" SmallChange="0.5" Value="{x:Bind ViewModel.SprtElo1, Mode=TwoWay}" />
+                        <NumberBox Grid.Row="1" Header="alpha" SmallChange="0.01" Value="{x:Bind ViewModel.SprtAlpha, Mode=TwoWay}" />
+                        <NumberBox Grid.Row="1" Grid.Column="1" Header="beta" SmallChange="0.01" Value="{x:Bind ViewModel.SprtBeta, Mode=TwoWay}" />
+                        <ComboBox Grid.Row="1" Grid.Column="2" Header="Model" HorizontalAlignment="Stretch"
+                                  SelectedIndex="{x:Bind ViewModel.SprtModelIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="Normalized" />
+                            <ComboBoxItem Content="Logistic" />
+                            <ComboBoxItem Content="Bayesian" />
+                        </ComboBox>
+                    </Grid>
+                </Expander>
+
+                <Expander Header="Output and recovery" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                          IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}">
+                    <Grid ColumnSpacing="12" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBox Header="Event" Grid.ColumnSpan="2" Text="{x:Bind ViewModel.Event, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Grid.Column="2" Header="Site" Text="{x:Bind ViewModel.Site, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <Grid Grid.Row="1" Grid.ColumnSpan="3" ColumnSpacing="4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Header="PGN output (empty = a new file in the run folder)"
+                                     Text="{x:Bind ViewModel.PgnOut, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            <Button Grid.Column="1" VerticalAlignment="Bottom" Content="..." Command="{x:Bind ViewModel.BrowsePgnOutCommand}" />
+                        </Grid>
+                        <ComboBox Grid.Row="2" Header="Notation" HorizontalAlignment="Stretch"
+                                  SelectedIndex="{x:Bind ViewModel.PgnNotationIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="SAN" />
+                            <ComboBoxItem Content="LAN" />
+                            <ComboBoxItem Content="UCI" />
+                        </ComboBox>
+                        <CheckBox Grid.Row="2" Grid.Column="1" VerticalAlignment="Bottom" Content="Append" IsChecked="{x:Bind ViewModel.PgnAppend, Mode=TwoWay}" />
+                        <CheckBox Grid.Row="2" Grid.Column="2" VerticalAlignment="Bottom" Content="Minimal PGN" IsChecked="{x:Bind ViewModel.PgnMinimal, Mode=TwoWay}" />
+                        <CheckBox Grid.Row="3" Content="Nodes, seldepth and nps in comments" Grid.ColumnSpan="2"
+                                  IsChecked="{x:Bind ViewModel.PgnSearchInfo, Mode=TwoWay}" />
+                        <TextBox Grid.Row="3" Grid.Column="2" Header="Final EPD file (optional)"
+                                 Text="{x:Bind ViewModel.EpdOut, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <CheckBox Grid.Row="4" VerticalAlignment="Bottom" Content="Recover crashed engines" IsChecked="{x:Bind ViewModel.Recover, Mode=TwoWay}" />
+                        <NumberBox Grid.Row="4" Grid.Column="1" Header="Autosave every N games" Minimum="0" Value="{x:Bind ViewModel.AutosaveInterval, Mode=TwoWay}" />
+                        <NumberBox Grid.Row="4" Grid.Column="2" Header="Rating report interval" Minimum="0" Value="{x:Bind ViewModel.RatingInterval, Mode=TwoWay}" />
+
+                        <TextBox Grid.Row="5" Header="Protocol log file (optional)"
+                                 Text="{x:Bind ViewModel.LogFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <ComboBox Grid.Row="5" Grid.Column="1" Header="Log level" HorizontalAlignment="Stretch"
+                                  SelectedIndex="{x:Bind ViewModel.LogLevelIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="trace" />
+                            <ComboBoxItem Content="info" />
+                            <ComboBoxItem Content="warn" />
+                            <ComboBoxItem Content="err" />
+                            <ComboBoxItem Content="fatal" />
+                        </ComboBox>
+                        <CheckBox Grid.Row="5" Grid.Column="2" VerticalAlignment="Bottom" Content="Engine traffic"
+                                  IsChecked="{x:Bind ViewModel.LogEngineTraffic, Mode=TwoWay}" />
+                    </Grid>
+                </Expander>
+
+                <Expander Header="Advanced" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                          IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}">
+                    <StackPanel Spacing="8">
+                        <TextBox Header="Opening shuffle seed (-srand; empty = random)"
+                                 Text="{x:Bind ViewModel.Srand, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <CheckBox Content="Cutechess-compatible console output" IsChecked="{x:Bind ViewModel.CutechessOutput, Mode=TwoWay}" />
+                        <CheckBox Content="Pentanomial statistics" IsChecked="{x:Bind ViewModel.ReportPenta, Mode=TwoWay}" />
+                        <TextBox Header="Extra fastchess arguments (appended as typed)"
+                                 Text="{x:Bind ViewModel.ExtraArguments, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 FontFamily="{StaticResource MonoFont}" />
+                    </StackPanel>
+                </Expander>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Run control and output -->
+        <Grid Grid.Column="1" RowSpacing="8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Style="{StaticResource AccentButtonStyle}" Content="Start" MinWidth="96" Command="{x:Bind ViewModel.StartCommand}" />
+                <Button Content="Stop" MinWidth="96" Command="{x:Bind ViewModel.StartCancelCommand}" />
+                <CheckBox VerticalAlignment="Center" Content="Import games into the open database when finished"
+                          IsChecked="{x:Bind ViewModel.ImportResults, Mode=TwoWay}" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="1" Spacing="4">
+                <ProgressBar Value="{x:Bind ViewModel.GamesFinished, Mode=OneWay}" Maximum="{x:Bind ViewModel.GamesTotal, Mode=OneWay}" />
+                <TextBlock Text="{x:Bind ViewModel.ProgressText, Mode=OneWay}" />
+            </StackPanel>
+
+            <TextBlock Grid.Row="2" Text="{x:Bind ViewModel.ValidationSummary, Mode=OneWay}" TextWrapping="Wrap"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+            <Expander Grid.Row="3" Header="Command line" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <TextBox Text="{x:Bind ViewModel.CommandPreview, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap"
+                         FontFamily="{StaticResource MonoFont}" MaxHeight="160" />
+            </Expander>
+
+            <Pivot Grid.Row="4">
+                <PivotItem Header="Log">
+                    <views:LogPanel Log="{x:Bind ViewModel.Log}" Margin="0,8,0,0" />
+                </PivotItem>
+                <PivotItem Header="Standings">
+                    <ListView ItemsSource="{x:Bind ViewModel.Standings}" SelectionMode="None" Margin="0,8,0,0">
+                        <ListView.Header>
+                            <Grid Padding="12,0" ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="110" />
+                                    <ColumnDefinition Width="80" />
+                                    <ColumnDefinition Width="140" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="#" FontWeight="SemiBold" />
+                                <TextBlock Grid.Column="1" Text="Engine" FontWeight="SemiBold" />
+                                <TextBlock Grid.Column="2" Text="Score" FontWeight="SemiBold" />
+                                <TextBlock Grid.Column="3" Text="%" FontWeight="SemiBold" />
+                                <TextBlock Grid.Column="4" Text="W / D / L" FontWeight="SemiBold" />
+                            </Grid>
+                        </ListView.Header>
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="vm:StandingRow">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="40" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="80" />
+                                        <ColumnDefinition Width="140" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{x:Bind RankText}" />
+                                    <TextBlock Grid.Column="1" Text="{x:Bind Engine}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="2" Text="{x:Bind Score}" />
+                                    <TextBlock Grid.Column="3" Text="{x:Bind Percent}" />
+                                    <TextBlock Grid.Column="4" Text="{x:Bind Wdl}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </PivotItem>
+                <PivotItem Header="Finished games">
+                    <ListView ItemsSource="{x:Bind ViewModel.FinishedGames}" SelectionMode="None" Margin="0,8,0,0">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="vm:FinishedGameRow">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="60" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="70" />
+                                        <ColumnDefinition Width="2*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{x:Bind NumberText}" />
+                                    <TextBlock Grid.Column="1" Text="{x:Bind Pairing}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="2" Text="{x:Bind Result}" />
+                                    <TextBlock Grid.Column="3" Text="{x:Bind Reason}" TextTrimming="CharacterEllipsis"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </PivotItem>
+            </Pivot>
+        </Grid>
+    </Grid>
+</Page>

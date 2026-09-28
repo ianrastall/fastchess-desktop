@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="FastchessDesktop.App.Views.LogPanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:FastchessDesktop.ViewModels"
+    xmlns:services="using:FastchessDesktop.App.Services">
+    <Grid RowSpacing="4">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <CheckBox x:Name="AutoScroll" Content="Follow output" IsChecked="True" MinWidth="0" />
+            <Button Content="Copy" Click="OnCopyClick" />
+            <Button Content="Clear" Click="OnClearClick" />
+        </StackPanel>
+        <ListView
+            x:Name="Lines"
+            Grid.Row="1"
+            SelectionMode="None"
+            IsItemClickEnabled="False"
+            Background="{ThemeResource ControlFillColorInputActiveBrush}"
+            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="4">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="MinHeight" Value="0" />
+                    <Setter Property="Padding" Value="8,0" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="vm:LogEntry">
+                    <TextBlock
+                        Text="{x:Bind Display}"
+                        Foreground="{x:Bind services:LogColors.For(Kind)}"
+                        FontFamily="{StaticResource MonoFont}"
+                        FontSize="12"
+                        TextWrapping="NoWrap"
+                        IsTextSelectionEnabled="True" />
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
+</UserControl>
