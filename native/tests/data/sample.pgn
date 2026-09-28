@@ -1,0 +1,67 @@
+[Event "Test Cup"]
+[Site "Local"]
+[Date "2026.09.01"]
+[Round "1"]
+[White "Alpha"]
+[Black "Beta"]
+[Result "1-0"]
+[TimeControl "10+0.1"]
+[PlyCount "7"]
+[GameDuration "00:00:05"]
+
+1. e4 {+0.30/12 0.10s} e5 {-0.25/11 0.09s} 2. Bc4 Nc6 3. Qh5 Nf6?? 4. Qxf7# {+M1/1 0.01s} 1-0
+
+[Event "Test Cup"]
+[Site "Local"]
+[Date "2026.09.01"]
+[Round "2"]
+[White "Beta"]
+[Black "Gamma"]
+[Result "*"]
+
+1. f3 e5 2. g4 Qh4# *
+
+[Event "Test Cup"]
+[Site "Local"]
+[Date "2026.09.01"]
+[Round "1"]
+[White "Alpha"]
+[Black "Beta"]
+[Result "1-0"]
+[TimeControl "10+0.1"]
+[PlyCount "7"]
+[GameDuration "00:00:05"]
+
+1. e4 {+0.30/12 0.10s} e5 {-0.25/11 0.09s} 2. Bc4 Nc6 3. Qh5 Nf6?? 4. Qxf7# {+M1/1 0.01s} 1-0
+
+[Event "Test Cup"]
+[Site "Local"]
+[Date "2026.09.01"]
+[Round "3"]
+[White "Gamma"]
+[Black "Alpha"]
+[Result "1-0"]
+
+1. e4 e5 2. Ke3 Qxz9 1-0
+
+[Event "Test Cup"]
+[Site "Local"]
+[Date "2026.09.02"]
+[Round "4"]
+[White "Gamma"]
+[Black "Alpha"]
+[Result "1/2-1/2"]
+[SetUp "1"]
+[FEN "4k3/8/8/8/8/8/4P3/4K3 b - - 0 40"]
+
+40... Kd7 41. Kd2 Kd6 42. Kd3 1/2-1/2
+
+[Event "Test Cup"]
+[Site "Local"]
+[Date "2026.09.02"]
+[Round "5"]
+[White "René"]
+[Black "Alpha"]
+[Result "0-1"]
+
+1. d4 d5 2. c4 e6 0-1

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+    <NativeConfiguration Condition="'$(Configuration)' == 'Debug'">Debug</NativeConfiguration>
+    <NativeConfiguration Condition="'$(Configuration)' != 'Debug'">Release</NativeConfiguration>
+    <RootNamespace>FastchessDesktop.Core.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FastchessDesktop.Core\FastchessDesktop.Core.csproj" />
+  </ItemGroup>
+
+  <!-- The native core must be built first (see README). Whichever build exists is copied next to the tests. -->
+  <ItemGroup>
+    <None Include="$(RepositoryRoot)native\out\build\windows-x64\$(NativeConfiguration)\fcd_core.dll" Condition="Exists('$(RepositoryRoot)native\out\build\windows-x64\$(NativeConfiguration)\fcd_core.dll')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(RepositoryRoot)native/out/build/linux/libfcd_core.so" Condition="Exists('$(RepositoryRoot)native/out/build/linux/libfcd_core.so')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(RepositoryRoot)native/tests/data/sample.pgn" Link="data/sample.pgn" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(RepositoryRoot)assets/lichess-openings/lichess-openings.tsv" Link="data/lichess-openings.tsv" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="fake_uci_engine.py" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
