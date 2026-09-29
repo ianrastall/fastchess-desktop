@@ -347,8 +347,11 @@
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Style="{StaticResource AccentButtonStyle}" Content="Start" MinWidth="96" Command="{x:Bind ViewModel.StartCommand}" />
                 <Button Content="Stop" MinWidth="96" Command="{x:Bind ViewModel.StartCancelCommand}" />
-                <CheckBox VerticalAlignment="Center" Content="Import games into the open database when finished"
-                          IsChecked="{x:Bind ViewModel.ImportResults, Mode=TwoWay}" />
+                <CheckBox VerticalAlignment="Center" Content="Import games into the database when finished"
+                          IsChecked="{x:Bind ViewModel.ImportResults, Mode=TwoWay}"
+                          ToolTipService.ToolTip="Into the database open on the Database page, or the default database if none is open" />
+                <Button Content="Import games now" Command="{x:Bind ViewModel.ImportLastGamesCommand}"
+                        ToolTipService.ToolTip="Import the last run's PGN file into the database (duplicates are skipped)" />
             </StackPanel>
 
             <StackPanel Grid.Row="1" Spacing="4">

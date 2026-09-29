@@ -21,7 +21,10 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
     public DatabaseViewModel Database { get; }
     public TournamentViewModel Tournament { get; }
 
-    /// <summary>Loads saved settings and reopens the last database, if it still exists.</summary>
+    /// <summary>
+    /// Loads saved settings and reopens the last database if it still exists; otherwise opens the
+    /// default database, so there is always somewhere for games to go.
+    /// </summary>
     public async Task InitializeAsync()
     {
         var saved = _store.Load();
@@ -29,6 +32,8 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
         Tournament.Load(saved.Tournament, saved.ImportTournamentResults);
         if (saved.LastDatabasePath.Length > 0 && File.Exists(saved.LastDatabasePath))
             await Database.OpenAsync(saved.LastDatabasePath);
+        else
+            await Database.EnsureOpenAsync();
     }
 
     public AppSettings CollectSettings() => new()

@@ -396,6 +396,36 @@ public sealed class DatabaseViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Without_a_saved_database_the_default_database_is_opened()
+    {
+        await _shell.InitializeAsync();
+        var vm = _shell.Database;
+        Assert.True(vm.IsOpen);
+        Assert.Equal(vm.DefaultDatabasePath, vm.DatabasePath);
+        Assert.StartsWith(_env.DataDirectory, vm.DefaultDatabasePath, StringComparison.Ordinal);
+        Assert.Equal("games.fcdb (default database)", vm.Title);
+        Assert.True(File.Exists(vm.DefaultDatabasePath));
+    }
+
+    [Fact]
+    public async Task Importing_with_no_database_open_uses_the_default_database()
+    {
+        var vm = _shell.Database;
+        Assert.False(vm.IsOpen);
+        Assert.True(vm.ImportPgnCommand.CanExecute(null));
+        Assert.False(_shell.Tournament.ImportLastGamesCommand.CanExecute(null)); // no run yet
+
+        var r = await vm.ImportFileAsync(Path.Combine(Data, "sample.pgn"));
+        Assert.Equal(new ImportResult(4, 1, 1), r);
+        Assert.Equal(vm.DefaultDatabasePath, vm.DatabasePath);
+        Assert.Equal(4, vm.TotalCount);
+
+        vm.CloseDatabaseCommand.Execute(null);
+        await vm.OpenDefaultDatabaseCommand.ExecuteAsync(null);
+        Assert.Equal(4, vm.TotalCount); // the default database is a file, so the games are kept
+    }
+
+    [Fact]
     public async Task Settings_persist_including_last_database()
     {
         await OpenWithSampleAsync();

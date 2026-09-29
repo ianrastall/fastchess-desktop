@@ -58,7 +58,29 @@ public sealed partial class DatabaseViewModel : ObservableObject, IDisposable
     public partial string DatabasePath { get; set; } = "";
 
     public bool IsOpen => _db is not null;
-    public string Title => IsOpen ? Path.GetFileName(DatabasePath) : "No database open";
+
+    public string Title => !IsOpen ? "No database open"
+        : IsDefaultDatabase(DatabasePath) ? Path.GetFileName(DatabasePath) + " (default database)"
+        : Path.GetFileName(DatabasePath);
+
+    /// <summary>
+    /// The database used when no other is open: %LOCALAPPDATA%\FastchessDesktop\games.fcdb. It is
+    /// created on first use. Unlike a temporary clipbase it is a normal file, so tournament games
+    /// imported into it are kept.
+    /// </summary>
+    public string DefaultDatabasePath => Path.Combine(_environment.DataDirectory, "games.fcdb");
+
+    private bool IsDefaultDatabase(string path) =>
+        string.Equals(Path.GetFullPath(path), Path.GetFullPath(DefaultDatabasePath), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Opens the default database unless a database is already open. Returns whether one is open.</summary>
+    public async Task<bool> EnsureOpenAsync()
+    {
+        if (IsOpen) return true;
+        Directory.CreateDirectory(_environment.DataDirectory);
+        await OpenAsync(DefaultDatabasePath);
+        return IsOpen;
+    }
 
     [ObservableProperty] public partial string SearchText { get; set; } = "";
     [ObservableProperty] public partial GameSortColumn SortColumn { get; set; } = GameSortColumn.Id;
@@ -107,7 +129,7 @@ public sealed partial class DatabaseViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(IsIdle))]
     [NotifyCanExecuteChangedFor(nameof(ImportPgnCommand), nameof(ExportCommand), nameof(ClassifyOpeningsCommand),
         nameof(FillResultsCommand), nameof(AnalyzeCommand), nameof(ComputeRatingsCommand), nameof(RunPgnExtractCommand),
-        nameof(DeleteSelectedCommand), nameof(NewDatabaseCommand), nameof(OpenDatabaseCommand),
+        nameof(DeleteSelectedCommand), nameof(NewDatabaseCommand), nameof(OpenDatabaseCommand), nameof(OpenDefaultDatabaseCommand),
         nameof(CloseDatabaseCommand), nameof(WriteEcoFileCommand), nameof(CancelBusyCommand))]
     public partial bool IsBusy { get; set; }
 
@@ -131,6 +153,13 @@ public sealed partial class DatabaseViewModel : ObservableObject, IDisposable
     {
         var path = await _dialogs.PickOpenFileAsync(FileFilters.Database);
         if (path is not null) await OpenAsync(path);
+    }
+
+    [RelayCommand(CanExecute = nameof(IsIdle))]
+    private async Task OpenDefaultDatabaseAsync()
+    {
+        Directory.CreateDirectory(_environment.DataDirectory);
+        await OpenAsync(DefaultDatabasePath);
     }
 
     /// <summary>Opens (or creates) a database file and loads the first page.</summary>
@@ -336,19 +365,23 @@ public sealed partial class DatabaseViewModel : ObservableObject, IDisposable
 
     private bool CanRunTool() => IsOpen && !IsBusy;
 
-    [RelayCommand(CanExecute = nameof(CanRunTool))]
+    /// <summary>Available without an open database: the default database is opened for the import.</summary>
+    [RelayCommand(CanExecute = nameof(IsIdle))]
     private async Task ImportPgnAsync()
     {
         var path = await _dialogs.PickOpenFileAsync(FileFilters.Pgn);
         if (path is not null) await ImportFileAsync(path);
     }
 
-    /// <summary>Imports a PGN file into the open database. Returns null if nothing was imported.</summary>
+    /// <summary>
+    /// Imports a PGN file into the open database, opening the default database first if none is
+    /// open. Returns null if nothing was imported.
+    /// </summary>
     public async Task<ImportResult?> ImportFileAsync(string path)
     {
-        if (_db is not { } db)
+        if (!await EnsureOpenAsync() || _db is not { } db)
         {
-            Log.Error("No database is open; import skipped for " + path);
+            Log.Error("No database could be opened; import skipped for " + path);
             return null;
         }
         if (IsBusy)

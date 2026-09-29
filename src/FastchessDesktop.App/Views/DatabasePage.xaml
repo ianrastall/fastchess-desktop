@@ -22,9 +22,12 @@
         <StackPanel Orientation="Horizontal" Spacing="8">
             <Button Content="New..." Command="{x:Bind ViewModel.NewDatabaseCommand}" />
             <Button Content="Open..." Command="{x:Bind ViewModel.OpenDatabaseCommand}" />
+            <Button Content="Open default" Command="{x:Bind ViewModel.OpenDefaultDatabaseCommand}"
+                    ToolTipService.ToolTip="games.fcdb in the app's data folder; used whenever no other database is open" />
             <Button Content="Close" Command="{x:Bind ViewModel.CloseDatabaseCommand}" />
             <AppBarSeparator />
-            <Button Content="Import PGN..." Command="{x:Bind ViewModel.ImportPgnCommand}" />
+            <Button Content="Import PGN..." Command="{x:Bind ViewModel.ImportPgnCommand}"
+                    ToolTipService.ToolTip="Imports into the open database, or the default database if none is open" />
             <CheckBox VerticalAlignment="Center" Content="Skip duplicates" IsChecked="{x:Bind ViewModel.SkipDuplicatesOnImport, Mode=TwoWay}" />
             <Button Content="Refresh" Command="{x:Bind ViewModel.RefreshCommand}" />
             <TextBlock VerticalAlignment="Center" Margin="12,0,0,0" Style="{StaticResource BodyStrongTextBlockStyle}"

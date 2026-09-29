@@ -168,6 +168,7 @@ public sealed partial class TournamentViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsIdle))]
+    [NotifyCanExecuteChangedFor(nameof(ImportLastGamesCommand))]
     public partial bool IsRunning { get; set; }
 
     [ObservableProperty] public partial double GamesFinished { get; set; }
@@ -480,23 +481,8 @@ public sealed partial class TournamentViewModel : ObservableObject
 
             ReportOutputChecks(completed: !result.Cancelled && result.ExitCode == 0);
 
-            if (ImportResults && File.Exists(settings.PgnOut))
-            {
-                if (!_database.IsOpen)
-                {
-                    Log.Add($"The games were not imported because no database is open. Open or create one on the Database page, " +
-                            $"then import {settings.PgnOut}.", LogKind.Warning);
-                }
-                else
-                {
-                    Log.Add($"Importing {settings.PgnOut} into {_database.Title}...");
-                    var imported = await _database.ImportFileAsync(settings.PgnOut);
-                    if (imported is { } r)
-                        Log.Add($"Imported {r.Imported} games ({r.Duplicates} duplicates skipped, {r.Failed} unreadable).", LogKind.Success);
-                    else
-                        Log.Add("The import did not finish. The Database page log has the reason.", LogKind.Error);
-                }
-            }
+            LastPgnPath = File.Exists(settings.PgnOut) ? settings.PgnOut : "";
+            if (ImportResults && LastPgnPath.Length > 0) await ImportLastGamesAsync();
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -509,6 +495,39 @@ public sealed partial class TournamentViewModel : ObservableObject
             IsRunning = false;
         }
     }
+
+    /// <summary>PGN file of the last run, for importing it later.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ImportLastGamesCommand))]
+    public partial string LastPgnPath { get; private set; } = "";
+
+    /// <summary>
+    /// Imports the last run's PGN into the open database, or into the default database when none
+    /// is open. Games already in the database are skipped when Skip duplicates is on.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanImportLastGames))]
+    private async Task ImportLastGamesAsync()
+    {
+        if (!File.Exists(LastPgnPath))
+        {
+            Log.Error("The PGN file of the last run no longer exists: " + LastPgnPath);
+            return;
+        }
+        if (!await _database.EnsureOpenAsync())
+        {
+            Log.Error("No database could be opened, so the games were not imported. The Database page log has the reason.");
+            return;
+        }
+        Log.Add($"Importing {LastPgnPath} into {_database.Title}...");
+        var imported = await _database.ImportFileAsync(LastPgnPath);
+        if (imported is { } r)
+            Log.Add($"Imported {r.Imported} games into {_database.Title} ({r.Duplicates} duplicates skipped, {r.Failed} unreadable). " +
+                    "They are on the Database page.", LogKind.Success);
+        else
+            Log.Add("The import did not finish. The Database page log has the reason.", LogKind.Error);
+    }
+
+    private bool CanImportLastGames() => LastPgnPath.Length > 0 && !IsRunning;
 
     private int _outputWarnings;
     private int _engineFailures;

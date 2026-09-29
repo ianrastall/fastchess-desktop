@@ -8,7 +8,7 @@ State of the repository on 2026-09-29, after the first Windows build and the own
 | --- | --- |
 | `native/` | Builds with MSVC through `native\build-native.ps1` (confirmed on the owner's machine) and with GCC on Linux. 109 checks pass. |
 | `FastchessDesktop.Core` | Warnings as errors; 75 tests pass on Linux, including the staged tournament runner and the statistics checked against a real fastchess report. |
-| `FastchessDesktop.ViewModels` | Warnings as errors; 18 tests pass on Linux. |
+| `FastchessDesktop.ViewModels` | Warnings as errors; 20 tests pass on Linux. |
 | `FastchessDesktop.App` | Built and installed as MSIX on Windows by the owner (package 1.0.271.8108); a two-engine match ran from the installed app, with run folders in the real `%LOCALAPPDATA%\FastchessDesktop`. |
 
 ## Changes In This Pass
@@ -55,6 +55,16 @@ State of the repository on 2026-09-29, after the first Windows build and the own
 - The log keeps the last line in view with `ItemsUpdatingScrollMode.KeepLastItemInView` instead of
   calling `ScrollIntoView` for every batch of lines; that and the entrance animation made it flash.
 
+## Default Database
+
+- There is always somewhere for games to go: `%LOCALAPPDATA%\FastchessDesktop\games.fcdb` is the
+  default database. It is opened at startup unless the last used database still exists, and
+  `DatabaseViewModel.EnsureOpenAsync` opens it whenever an import finds no database open (the
+  post-tournament import, Import PGN, and the Tournament page's Import games now button).
+- It is a normal file rather than a temporary clipbase, so imported tournament games survive a
+  restart. Before this, importing required creating or opening a database first, and Import PGN
+  was disabled with none open.
+
 ## Packaging Design
 
 - One project, two modes. The default stays unpackaged (`WindowsPackageType=None`), so
@@ -81,7 +91,7 @@ State of the repository on 2026-09-29, after the first Windows build and the own
 
 In the Linux container:
 
-- `dotnet test` for both test projects (75 and 18 pass).
+- `dotnet test` for both test projects (75 and 20 pass).
 - The x:Bind checker, now also checking function bindings (263 paths and 30 function bindings,
   0 problems; confirmed to catch injected errors), and a stub compile of the App C#.
 - `dotnet restore` of the App project in both package modes; property and item evaluation of the

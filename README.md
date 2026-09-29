@@ -118,7 +118,9 @@ building, or set its path in Settings.
 
 User data lives in `%LOCALAPPDATA%\FastchessDesktop`: `settings.json`, one folder per tournament
 run under `runs\` (fastchess state file and PGN), and scratch files for tool runs under `work\`.
-Game databases (`.fcdb`, SQLite) are wherever you create them.
+Game databases (`.fcdb`, SQLite) are wherever you create them. When no other database is open the
+app uses a default database, `games.fcdb` in that folder, created on first use: tournament games
+and PGN imports go there, and it is opened at startup unless another database was open last time.
 
 ## Install as an app (MSIX)
 
