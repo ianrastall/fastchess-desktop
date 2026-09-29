@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- WinUI 3 shell. Unpackaged (no MSIX); Windows App SDK is bundled self-contained next to the exe. -->
+  <!--
+    WinUI 3 shell. The default build is unpackaged (run from bin\). package.ps1 builds the same
+    project as a signed MSIX with -p:WindowsPackageType=MSIX. The Windows App SDK is bundled
+    self-contained in both cases.
+  -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
@@ -7,11 +11,12 @@
     <RootNamespace>FastchessDesktop.App</RootNamespace>
     <AssemblyName>FastchessDesktop</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <UseWinUI>true</UseWinUI>
-    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsPackageType Condition="'$(WindowsPackageType)' == ''">None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <EnableMsixTooling>true</EnableMsixTooling>
     <!-- Generated XAML code may raise warnings that should not block a build. -->
@@ -25,6 +30,22 @@
     <NativeDll>$(NativeDir)out\build\windows-x64\$(NativeConfiguration)\fcd_core.dll</NativeDll>
     <AssetsDir>$(RepositoryRoot)assets\</AssetsDir>
     <ToolsExtractDir>$(BaseIntermediateOutputPath)tools-extract\</ToolsExtractDir>
+  </PropertyGroup>
+
+  <!--
+    The packaged build gets its own bin\ and obj\ folders. Packaged and unpackaged builds generate
+    different manifests and resources, and sharing one intermediate folder would let an incremental
+    build reuse the wrong ones.
+  -->
+  <PropertyGroup Condition="'$(WindowsPackageType)' == 'MSIX'">
+    <OutputPath>bin\msix\$(Platform)\$(Configuration)\</OutputPath>
+    <IntermediateOutputPath>obj\msix\$(Platform)\$(Configuration)\</IntermediateOutputPath>
+    <!-- The manifest turns off file system write virtualization, which needs Windows 10 2004. -->
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <AppxBundle>Never</AppxBundle>
+    <UapAppxPackageBuildMode>SideloadOnly</UapAppxPackageBuildMode>
+    <AppxSymbolPackageEnabled>false</AppxSymbolPackageEnabled>
+    <GenerateTestArtifacts>true</GenerateTestArtifacts>
   </PropertyGroup>
 
   <ItemGroup>
@@ -48,29 +69,36 @@
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(NativeDir)build-native.ps1&quot; -Configuration $(NativeConfiguration)" />
   </Target>
 
-  <Target Name="CopyNativeCore" AfterTargets="Build">
-    <Error Condition="!Exists('$(NativeDll)')" Text="Native library not found: $(NativeDll). Build native/ first (see README.md)." />
-    <Copy SourceFiles="$(NativeDll)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
-  </Target>
+  <!--
+    Files laid out next to the exe: fcd_core.dll, and the tools bundled from assets\ (tracked in git)
+    under tools\ and data\. They are Content items so that the MSIX payload includes them as well.
+  -->
+  <ItemGroup>
+    <Content Include="$(NativeDll)" Link="fcd_core.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(ToolsExtractDir)fastchess\fastchess-windows-x86-64\fastchess.exe" Link="tools\fastchess\fastchess.exe" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(ToolsExtractDir)ordo\ordo-1.2.6-win\ordo-win64.exe" Link="tools\ordo\ordo-win64.exe" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(ToolsExtractDir)ordo\ordo-1.2.6-win\LICENSE.txt" Link="tools\ordo\LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(ToolsExtractDir)ordoprep\ordoprep-v0.9.9.8-win\ordoprep-win64.exe" Link="tools\ordoprep\ordoprep-win64.exe" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(ToolsExtractDir)ordoprep\ordoprep-v0.9.9.8-win\LICENSE.txt" Link="tools\ordoprep\LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(AssetsDir)pgn-extract\pgn-extract.exe" Link="tools\pgn-extract\pgn-extract.exe" CopyToOutputDirectory="PreserveNewest" />
+    <StockfishExe Include="$(AssetsDir)stockfish\**\*.exe" />
+    <Content Include="@(StockfishExe)" Link="tools\stockfish\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(AssetsDir)lichess-openings\lichess-openings.tsv" Link="data\lichess-openings.tsv" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 
-  <!-- Bundled tools from assets/ (tracked in git) are laid out under tools\ and data\ next to the exe. -->
-  <Target Name="BundleTools" AfterTargets="Build">
+  <!-- Runs before any target that lists or copies content, so the extracted files exist in time. -->
+  <Target Name="ExtractBundledTools" BeforeTargets="BeforeBuild;AssignTargetPaths">
     <Unzip SourceFiles="$(AssetsDir)fastchess\fastchess-windows-x86-64.zip" DestinationFolder="$(ToolsExtractDir)fastchess"
            Condition="!Exists('$(ToolsExtractDir)fastchess')" />
     <Unzip SourceFiles="$(AssetsDir)ordo\ordo-1.2.6-win.zip" DestinationFolder="$(ToolsExtractDir)ordo"
            Condition="!Exists('$(ToolsExtractDir)ordo')" />
     <Unzip SourceFiles="$(AssetsDir)ordoprep\ordoprep-v0.9.9.8-win.zip" DestinationFolder="$(ToolsExtractDir)ordoprep"
            Condition="!Exists('$(ToolsExtractDir)ordoprep')" />
-    <ItemGroup>
-      <StockfishExe Include="$(AssetsDir)stockfish\**\*.exe" />
-    </ItemGroup>
-    <Copy SourceFiles="$(ToolsExtractDir)fastchess\fastchess-windows-x86-64\fastchess.exe" DestinationFolder="$(OutDir)tools\fastchess" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(ToolsExtractDir)ordo\ordo-1.2.6-win\ordo-win64.exe;$(ToolsExtractDir)ordo\ordo-1.2.6-win\LICENSE.txt" DestinationFolder="$(OutDir)tools\ordo" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(ToolsExtractDir)ordoprep\ordoprep-v0.9.9.8-win\ordoprep-win64.exe;$(ToolsExtractDir)ordoprep\ordoprep-v0.9.9.8-win\LICENSE.txt" DestinationFolder="$(OutDir)tools\ordoprep" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(AssetsDir)pgn-extract\pgn-extract.exe" DestinationFolder="$(OutDir)tools\pgn-extract" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(StockfishExe)" DestinationFolder="$(OutDir)tools\stockfish" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(AssetsDir)lichess-openings\lichess-openings.tsv" DestinationFolder="$(OutDir)data" SkipUnchangedFiles="true" />
     <Warning Condition="'@(StockfishExe)' == ''"
              Text="No Stockfish executable under assets\stockfish\. Analysis needs Stockfish; set its path in Settings or place the exe there." />
+  </Target>
+
+  <Target Name="CheckNativeCore" AfterTargets="BuildNativeCore" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('$(NativeDll)')" Text="Native library not found: $(NativeDll). Build native/ first (see README.md)." />
   </Target>
 </Project>

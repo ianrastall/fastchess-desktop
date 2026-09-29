@@ -32,7 +32,7 @@ bld/
 [Ll]og/
 [Ll]ogs/
 
-assets/
+/assets/
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
@@ -404,3 +404,6 @@ FodyWeavers.xsd
 
 # Native build output (CMake presets)
 native/out/
+
+# MSIX packages and the exported public certificate (package.ps1)
+dist/

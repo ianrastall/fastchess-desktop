@@ -4,7 +4,9 @@ A Windows desktop front end for the [fastchess](https://github.com/Disservin/fas
 tournament runner, with a game database for the results.
 
 - **Tournament** page: configure engines and every fastchess option, start and stop a run,
-  and watch the live log, progress, standings and finished games.
+  and watch the live log, progress, standings and finished games. Formats: round robin and
+  gauntlet (run by fastchess itself), plus pyramid, knockout and Swiss (run by the app as a series
+  of fastchess runs, see below). Engine names are read from the engine (`id name`) when it is added.
 - **Database** page: a table of stored games with search, sorting and paging, a tag editor,
   and tools that run on selected games or on everything matching the filter:
   - classify openings from the Lichess chess-openings list (by complete EPD, last matched position)
@@ -17,6 +19,23 @@ tournament runner, with a game database for the results.
 - **Settings**: tool locations, analysis and rating options.
 
 The UI is dark mode only.
+
+## Tournament formats
+
+fastchess 1.8 only schedules round robin and gauntlet tournaments. The other formats are run by
+`TournamentRunner` (in `FastchessDesktop.Core`) as one fastchess run per stage or match. All runs
+append to the same PGN, and game numbers and progress continue across runs.
+
+| Format | How it is played |
+| --- | --- |
+| Round robin | One fastchess run; every engine meets every other engine. |
+| Gauntlet | One fastchess run; the first *seeds* engines play everyone else. |
+| Pyramid | Engines join in list order; each newcomer plays a gauntlet against all engines listed before it. |
+| Knockout | Single elimination seeded by list order (top seeds get byes). A tied match plays the tiebreak game pairs, then the higher seed advances. |
+| Swiss | A set number of rounds. Engines with equal scores are paired, without rematches where possible; an odd engine out gets a full-point bye. Final ranking by score, then Buchholz. |
+
+SPRT is only available for round robin and gauntlet. A stopped pyramid, knockout or Swiss
+tournament cannot be resumed.
 
 ## Architecture
 
@@ -97,6 +116,30 @@ User data lives in `%LOCALAPPDATA%\FastchessDesktop`: `settings.json`, one folde
 run under `runs\` (fastchess state file and PGN), and scratch files for tool runs under `work\`.
 Game databases (`.fcdb`, SQLite) are wherever you create them.
 
+## Install as an app (MSIX)
+
+To install Fastchess Desktop like any other app, with a Start menu entry and a taskbar pin that
+always opens the newest build:
+
+```powershell
+.\package.ps1
+```
+
+This builds the app as an MSIX package, signs it, and installs or upgrades it for the current
+user. Run it again after pulling changes: each package gets a higher version, and Windows
+upgrades the installed app in place, so the Start menu entry and any taskbar pin stay valid. Use
+`-SkipTests` to skip the tests and `-NoInstall` to only build the package.
+
+Signing: Windows only installs packages signed by a trusted publisher. The first run creates a
+self-signed certificate `CN=FastchessDesktop` in your user certificate store and, after one UAC
+prompt, adds its public part to the machine's Trusted People store. Later runs reuse it. The
+private key stays in the certificate store; nothing is written to the repository.
+
+The package goes to `dist\` (ignored by git). Double-clicking a `.msix` there installs it
+as well. The packaged app needs Windows 10 2004 or later. It keeps its data in the same
+`%LOCALAPPDATA%\FastchessDesktop` folder as the unpackaged build. To uninstall it, use
+Settings > Apps, or run `Get-AppxPackage FastchessDesktop | Remove-AppxPackage` in Windows PowerShell.
+
 ## Test
 
 Native (any OS with CMake, a C++20 compiler and SQLite development files):
@@ -121,7 +164,8 @@ The C# test projects copy the native library that the matching native build prod
   and the log prints the `-config` argument that resumes the run.
 - Analysis skips Chess960 games.
 - Evaluations are stored per game but are not yet written into exported PGN comments.
-- There is no installer or `dotnet publish` profile yet; run the app from its build folder.
+- The MSIX package is signed with a self-signed certificate, so it installs only on machines that
+  trust that certificate (package.ps1 sets this up on the machine that builds it).
 
 ## License
 
