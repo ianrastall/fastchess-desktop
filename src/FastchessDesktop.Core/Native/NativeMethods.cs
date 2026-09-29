@@ -11,7 +11,7 @@ internal static unsafe partial class NativeMethods
     private const string Library = "fcd_core";
 
     /// <summary>Must equal FCD_ABI_VERSION in fcd.h.</summary>
-    public const int ExpectedAbiVersion = 2;
+    public const int ExpectedAbiVersion = 3;
 
     [StructLayout(LayoutKind.Sequential)]
     public struct FcdQuery
@@ -133,6 +133,8 @@ public enum FcdStatus
     Parse = 4,
     NotFound = 5,
     Cancelled = 6,
+    Timeout = 7,
+    Process = 8,
     Internal = 99,
 }
 

@@ -15,7 +15,8 @@
  *     use the camelCase property names and enum member names of the C# records
  *     they mirror (TournamentSettings, RatingSettings).
  *
- * The library performs no networking and no UI work.
+ * The library runs the external programs (fastchess, UCI engines, Ordo, Ordoprep,
+ * pgn-extract) itself. It performs no networking and no UI work.
  */
 #ifndef FCD_H
 #define FCD_H
@@ -36,7 +37,7 @@
 extern "C" {
 #endif
 
-#define FCD_ABI_VERSION 2
+#define FCD_ABI_VERSION 3
 
 typedef enum fcd_status {
     FCD_OK = 0,
@@ -46,6 +47,8 @@ typedef enum fcd_status {
     FCD_ERR_PARSE = 4,
     FCD_ERR_NOT_FOUND = 5,
     FCD_ERR_CANCELLED = 6,
+    FCD_ERR_TIMEOUT = 7, /* an engine did not answer in time */
+    FCD_ERR_PROCESS = 8, /* a child process exited or stopped accepting input unexpectedly */
     FCD_ERR_INTERNAL = 99
 } fcd_status;
 
@@ -283,6 +286,103 @@ FCD_API fcd_status fcd_pairing_knockout_next_round(const char* winners_json, cha
  *              "hadBye":[names],"whiteCounts":{name:count}}
  * Writes {"pairs":[pairing...],"bye":null|"name"}. */
 FCD_API fcd_status fcd_pairing_swiss_round(const char* state_json, char** out_json);
+
+/* ---- Cancellation ---------------------------------------------------------- */
+
+/* A flag that stops a running process, engine search, analysis or tournament. Thread-safe:
+ * fcd_cancel_request may be called from any thread while another thread waits in a call that
+ * received the token. Free only after that call has returned. */
+typedef struct fcd_cancel fcd_cancel;
+
+FCD_API fcd_status fcd_cancel_new(fcd_cancel** out_cancel);
+FCD_API void fcd_cancel_request(fcd_cancel* cancel);
+FCD_API void fcd_cancel_free(fcd_cancel* cancel);
+
+/* ---- Processes ------------------------------------------------------------- */
+
+/* Output line callback: stream 0 is standard output, 1 standard error. Called from a background
+ * thread, one call at a time; the line is valid only during the call. */
+typedef void (*fcd_line_fn)(void* user, int32_t stream, const char* line);
+
+typedef struct fcd_process_result {
+    int32_t exit_code;
+    int32_t cancelled; /* 1 when stopped through the cancel token */
+    int64_t duration_ms;
+} fcd_process_result;
+
+/* Runs a program to completion and blocks until it exits. args_json: JSON array of arguments,
+ * passed individually. working_directory NULL or empty: the program's directory. Standard input
+ * is the null device. Cancelling stops the process and every process it started, and returns
+ * FCD_OK with cancelled = 1. FCD_ERR_NOT_FOUND when the program does not exist. */
+FCD_API fcd_status fcd_process_run(const char* program, const char* args_json, const char* working_directory,
+                                   fcd_line_fn on_line, void* user, fcd_cancel* cancel,
+                                   fcd_process_result* out_result);
+
+/* ---- UCI engines ------------------------------------------------------------ */
+
+/* One engine process; use from one thread at a time. */
+typedef struct fcd_uci fcd_uci;
+
+typedef struct fcd_uci_limit {
+    int32_t depth;       /* 0: none */
+    int32_t movetime_ms; /* 0: none */
+    int64_t nodes;       /* 0: none; with no limit at all the search uses depth 12 */
+} fcd_uci_limit;
+
+/* Starts an engine and completes the uci/isready handshake (timeouts 15 s and 30 s), then sets the
+ * options (options_json: object of option name to value, may be NULL). FCD_ERR_NOT_FOUND when the
+ * executable does not exist, FCD_ERR_TIMEOUT when it does not answer, FCD_ERR_PROCESS when it exits. */
+FCD_API fcd_status fcd_uci_start(const char* path, const char* options_json, fcd_cancel* cancel, fcd_uci** out_engine);
+/* Sends quit, waits up to two seconds, then stops the process. */
+FCD_API void fcd_uci_close(fcd_uci* engine);
+/* The name the engine reported with "id name" (empty when it sent none). */
+FCD_API fcd_status fcd_uci_name(const fcd_uci* engine, char** out_text);
+FCD_API fcd_status fcd_uci_new_game(fcd_uci* engine, fcd_cancel* cancel);
+/* Searches the position after uci_moves (space separated) from start_fen (NULL or empty: the start
+ * position). Writes {"cp":n|null,"mate":n|null,"depth":n,"bestMove":"...","pv":[...]}, the score from
+ * the side to move's point of view. Cancelling sends "stop" and returns FCD_ERR_CANCELLED. */
+FCD_API fcd_status fcd_uci_search(fcd_uci* engine, const char* start_fen, const char* uci_moves,
+                                  const fcd_uci_limit* limit, fcd_cancel* cancel, char** out_json);
+/* Parses a UCI info line: {"cp","mate","depth","pv"} or the literal null when the line carries no
+ * final main-line score (bounds, multipv > 1, strings, currmove updates). */
+FCD_API fcd_status fcd_uci_parse_info(const char* line, char** out_json);
+
+typedef struct fcd_analysis_settings {
+    int32_t depth;
+    int32_t movetime_ms;
+} fcd_analysis_settings;
+
+/* Evaluates every position of a game (ply 0 to the end) and writes the analysis document, format 1:
+ * {"format":1,"engine","depth","moveTimeMs","analyzedAt",
+ *  "evals":[{"ply","cp","mate","depth","bestMove"}],"whiteAcpl","blackAcpl"}
+ * Evaluations are from White's point of view; absent values are omitted. mate 0 marks a checkmated
+ * position, with cp +/-1000 for the side that won. Average centipawn loss caps evaluations at
+ * +/-1000 and counts a forced mate as the cap. progress receives (ply, plies); returning non-zero,
+ * or the cancel token, stops the analysis with FCD_ERR_CANCELLED. */
+FCD_API fcd_status fcd_uci_analyze_game(fcd_uci* engine, const char* start_fen, const char* uci_moves,
+                                        const fcd_analysis_settings* settings, fcd_progress_fn progress, void* user,
+                                        fcd_cancel* cancel, char** out_json);
+
+/* ---- Tournaments --------------------------------------------------------------- */
+
+/* Event callback, called from a background thread, one call at a time. event_json is one of:
+ *   {"type":"commandStarted","commandLine"}          a fastchess process is about to start
+ *   {"type":"stageStarted","stage","description"}    a stage of a pyramid, knockout or Swiss
+ *   {"type":"gameStarted","number","total","white","black"}
+ *   {"type":"gameFinished","number","white","black","result","reason"}
+ *   {"type":"tournamentFinished","message"}
+ *   {"type":"note","message"}                        pairings, byes, tiebreaks, final ranking
+ * Game numbers are continuous across the runs of a staged tournament. */
+typedef void (*fcd_event_fn)(void* user, const char* event_json);
+
+/* Runs a tournament of any format with fastchess and blocks until it ends. Round robin and gauntlet
+ * are one fastchess run; pyramid, knockout and Swiss are a series of runs whose results decide the
+ * next pairings, all appending to the same PGN. on_line receives every output line; on_event the
+ * parsed events. Writes {"cancelled":bool,"exitCode":n,"durationMs":n,"ranking":[names]}; the ranking
+ * is empty for round robin and gauntlet and when a run failed or was stopped. */
+FCD_API fcd_status fcd_tournament_run(const char* fastchess_path, const char* working_directory,
+                                      const char* settings_json, fcd_line_fn on_line, fcd_event_fn on_event,
+                                      void* user, fcd_cancel* cancel, char** out_outcome_json);
 
 #ifdef __cplusplus
 }

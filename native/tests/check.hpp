@@ -48,3 +48,4 @@ inline bool near(double a, double b, double tolerance) { return std::fabs(a - b)
 
 // Test groups defined in the other test files.
 void run_tools_tests();
+void run_process_tests();

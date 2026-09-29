@@ -1,5 +1,6 @@
 using FastchessDesktop.Core.Engines;
 using FastchessDesktop.Core.Models;
+using FastchessDesktop.Tests;
 
 namespace FastchessDesktop.Core.Tests;
 
@@ -25,38 +26,21 @@ public class UciParsingTests
     [InlineData("info depth 5 currmove e2e4 currmovenumber 1")]
     public void Ignores_lines_that_are_not_a_final_mainline_score(string line) =>
         Assert.False(UciEngine.TryParseInfo(line, out _, out _, out _));
-
-    [Fact]
-    public void Average_loss_uses_mover_perspective_and_caps()
-    {
-        // White: 20 -> -30 loses 50. Black: -30 -> 1000 (mate for White) loses 1000 (capped).
-        PlyEvaluation[] evals = [new(0, 20, null, 1, null), new(1, -30, null, 1, null), new(2, null, 4, 1, null)];
-        var (white, black) = GameAnalyzer.AverageLoss(evals, whiteMovesFirst: true);
-        Assert.Equal(50, white);
-        Assert.Equal(1030, black);
-    }
 }
 
-/// <summary>Runs the real UCI client against tests/.../fake_uci_engine.py (needs python3; not on Windows).</summary>
+/// <summary>
+/// Runs the UCI client in fcd_core against the fake engine built with the native tests
+/// (native/tests/fake_uci_engine.cpp). Average centipawn loss is tested in the native tests.
+/// </summary>
 public class FakeEngineTests
 {
-    private static string? EnginePath()
-    {
-        if (OperatingSystem.IsWindows()) return null;
-        var path = Path.Combine(AppContext.BaseDirectory, "fake_uci_engine.py");
-        if (!File.Exists(path)) return null;
-        File.SetUnixFileMode(path, File.GetUnixFileMode(path) | UnixFileMode.UserExecute);
-        return path;
-    }
-
     [Fact]
     public async Task Analyzes_every_ply_from_whites_point_of_view()
     {
-        var path = EnginePath();
-        Assert.SkipWhen(path is null, "The fake engine is a Python script and runs only on Linux/macOS.");
         var ct = TestContext.Current.CancellationToken;
 
-        await using var engine = await UciEngine.StartAsync(path!, new Dictionary<string, string> { ["Hash"] = "32" }, ct);
+        await using var engine = await UciEngine.StartAsync(FakePrograms.UciEngine,
+            new Dictionary<string, string> { ["Hash"] = "32" }, ct);
         Assert.Equal("FakeEngine 1.0", engine.Name);
 
         var game = new GameDetail { UciMoves = ["f2f3", "e7e5", "g2g4", "d8h4"] };
@@ -73,5 +57,22 @@ public class FakeEngineTests
         Assert.Null(analysis.Evals[4].BestMove);
         Assert.Equal("FakeEngine 1.0", analysis.Engine);
         Assert.Contains("\"evals\":[", analysis.ToJson(), StringComparison.Ordinal);
+        Assert.Equal(20, analysis.WhiteAcpl);
+        Assert.Equal(0, analysis.BlackAcpl);
+
+        var search = await engine.SearchAsync(null, ["e2e4"], new UciLimit(Depth: 5), ct);
+        Assert.Equal(new UciScore(10, null), search.Score);
+        Assert.Equal(["e2e4", "e7e5"], search.Pv);
+    }
+
+    [Fact]
+    public async Task Missing_or_silent_engines_raise_the_usual_exceptions()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await Assert.ThrowsAsync<FileNotFoundException>(() =>
+            UciEngine.StartAsync(Path.Combine(AppContext.BaseDirectory, "no-such-engine"), new Dictionary<string, string>(), ct));
+        // fake_fastchess is not a UCI engine: it exits without answering.
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            UciEngine.StartAsync(FakePrograms.Fastchess, new Dictionary<string, string>(), ct));
     }
 }

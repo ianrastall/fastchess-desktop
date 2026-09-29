@@ -27,6 +27,11 @@
     <None Include="$(RepositoryRoot)native/out/build/linux/libfcd_core.so" Condition="Exists('$(RepositoryRoot)native/out/build/linux/libfcd_core.so')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <None Include="$(RepositoryRoot)native/tests/data/sample.pgn" Link="data/sample.pgn" CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(RepositoryRoot)assets/lichess-openings/lichess-openings.tsv" Link="data/lichess-openings.tsv" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\FastchessDesktop.Core.Tests\fake_uci_engine.py" Link="fake_uci_engine.py" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Stand-ins for fastchess and a UCI engine, built with the native tests. -->
+    <None Include="$(RepositoryRoot)native\out\build\windows-x64\$(NativeConfiguration)\fake_fastchess.exe" Condition="Exists('$(RepositoryRoot)native\out\build\windows-x64\$(NativeConfiguration)\fake_fastchess.exe')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(RepositoryRoot)native\out\build\windows-x64\$(NativeConfiguration)\fake_uci_engine.exe" Condition="Exists('$(RepositoryRoot)native\out\build\windows-x64\$(NativeConfiguration)\fake_uci_engine.exe')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(RepositoryRoot)native/out/build/linux/fake_fastchess" Condition="Exists('$(RepositoryRoot)native/out/build/linux/fake_fastchess')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(RepositoryRoot)native/out/build/linux/fake_uci_engine" Condition="Exists('$(RepositoryRoot)native/out/build/linux/fake_uci_engine')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <Compile Include="..\FastchessDesktop.Core.Tests\FakePrograms.cs" Link="FakePrograms.cs" />
   </ItemGroup>
 </Project>

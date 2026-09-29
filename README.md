@@ -48,15 +48,19 @@ src/FastchessDesktop.App         WinUI 3 views (XAML), dialogs, pickers. Windows
           |
 src/FastchessDesktop.ViewModels  MVVM view models (CommunityToolkit.Mvvm). No UI dependency.
           |
-src/FastchessDesktop.Core        P/Invoke wrapper, external process runner, fastchess/Ordo/
-          |                      Ordoprep/pgn-extract command builders, UCI client, settings.
+src/FastchessDesktop.Core        Thin C# layer: P/Invoke declarations, handles, JSON DTOs,
+          |                      exception mapping, the settings file.
           |  C ABI (native/include/fcd/fcd.h)
-native/ (fcd_core.dll)           C++20: SQLite game database, PGN import, chess rules,
-                                 opening classification, exports, rating import.
+native/ (fcd_core.dll)           C++20: SQLite game database, PGN import, chess rules, opening
+                                 classification, exports, rating import; tournament settings and
+                                 the fastchess command line; statistics and SPRT; pairings for the
+                                 staged formats; processes, the UCI client, game analysis and the
+                                 tournament runner.
 ```
 
-Dependencies only point downward. The native core does no process launching, networking or UI
-work; the C# layer runs the external programs and passes files to the core.
+Dependencies only point downward. The internals are in the native core, which also runs the
+external programs (fastchess, engines, Ordo, Ordoprep, pgn-extract). It does no networking and no
+UI work. The C# layers hold the UI and view-model logic and forward everything else to the core.
 
 Key decisions:
 

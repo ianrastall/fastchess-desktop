@@ -1,7 +1,6 @@
-using System.Diagnostics;
-using System.Globalization;
-using System.Text;
-using System.Threading.Channels;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using FastchessDesktop.Core.Native;
 
 namespace FastchessDesktop.Core.Engines;
 
@@ -14,227 +13,84 @@ public readonly record struct UciScore(int? Centipawns, int? Mate)
 public sealed record UciSearchResult(UciScore Score, int Depth, string BestMove, IReadOnlyList<string> Pv);
 
 /// <summary>Search limit for one position.</summary>
-public sealed record UciLimit(int Depth = 0, int MoveTimeMs = 0, long Nodes = 0)
-{
-    public string ToGoCommand()
-    {
-        var parts = new List<string> { "go" };
-        if (Depth > 0) parts.Add("depth " + Depth.ToString(CultureInfo.InvariantCulture));
-        if (MoveTimeMs > 0) parts.Add("movetime " + MoveTimeMs.ToString(CultureInfo.InvariantCulture));
-        if (Nodes > 0) parts.Add("nodes " + Nodes.ToString(CultureInfo.InvariantCulture));
-        if (parts.Count == 1) parts.Add("depth 12");
-        return string.Join(' ', parts);
-    }
-}
+public sealed record UciLimit(int Depth = 0, int MoveTimeMs = 0, long Nodes = 0);
 
-/// <summary>Minimal UCI client: one engine process, one search at a time.</summary>
+/// <summary>
+/// UCI client (one engine process, one search at a time), implemented in fcd_core. Calls block a
+/// thread-pool thread while the engine works; do not call it concurrently.
+/// </summary>
 public sealed class UciEngine : IAsyncDisposable
 {
-    private readonly Process _process;
-    private readonly Channel<string> _lines = Channel.CreateUnbounded<string>(new() { SingleReader = true });
-    private readonly Task _reader;
+    private readonly UciHandle _handle;
 
-    private UciEngine(Process process)
+    private UciEngine(UciHandle handle, string name)
     {
-        _process = process;
-        _reader = Task.Run(ReadLoopAsync);
+        _handle = handle;
+        Name = name;
     }
 
-    public string Name { get; private set; } = "";
+    /// <summary>The name the engine reported with "id name" (empty when it sent none).</summary>
+    public string Name { get; }
 
-    /// <summary>Starts the engine, completes the uci/isready handshake and applies options.</summary>
-    public static async Task<UciEngine> StartAsync(string path, IReadOnlyDictionary<string, string> options,
-        CancellationToken ct)
+    /// <summary>
+    /// Starts the engine, completes the uci/isready handshake and applies options. Throws
+    /// FileNotFoundException, TimeoutException (no answer) or InvalidOperationException (the engine exited).
+    /// </summary>
+    public static Task<UciEngine> StartAsync(string path, IReadOnlyDictionary<string, string> options,
+        CancellationToken ct) => Task.Run(() =>
     {
-        if (!File.Exists(path)) throw new FileNotFoundException($"Engine not found: {path}", path);
-        var psi = new ProcessStartInfo(path)
-        {
-            UseShellExecute = false,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            WorkingDirectory = Path.GetDirectoryName(path) ?? "",
-        };
-        var process = Process.Start(psi) ?? throw new InvalidOperationException($"Could not start {path}");
-        process.ErrorDataReceived += static (_, _) => { };
-        process.BeginErrorReadLine();
-        var engine = new UciEngine(process);
-        try
-        {
-            await engine.SendAsync("uci").ConfigureAwait(false);
-            await engine.WaitForAsync(l =>
-            {
-                if (l.StartsWith("id name ", StringComparison.Ordinal)) engine.Name = l[8..].Trim();
-                return l == "uciok";
-            }, TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
-            foreach (var (name, value) in options)
-                await engine.SendAsync($"setoption name {name} value {value}").ConfigureAwait(false);
-            await engine.SyncAsync(ct).ConfigureAwait(false);
-            return engine;
-        }
-        catch
-        {
-            await engine.DisposeAsync().ConfigureAwait(false);
-            throw;
-        }
-    }
+        var optionsJson = JsonSerializer.Serialize(options.ToDictionary(kv => kv.Key, kv => kv.Value),
+            UciJsonContext.Default.DictionaryStringString);
+        using var cancel = new NativeCancellation(ct);
+        NativeMethods.CheckProcess(NativeMethods.UciStart(path, optionsJson, cancel.Handle, out var raw), ct);
+        var handle = new UciHandle(raw);
+        var status = NativeMethods.UciName(handle, out var name);
+        return new UciEngine(handle, NativeMethods.TakeChecked(status, name));
+    }, CancellationToken.None);
 
-    public async Task NewGameAsync(CancellationToken ct)
+    public Task NewGameAsync(CancellationToken ct) => Task.Run(() =>
     {
-        await SendAsync("ucinewgame").ConfigureAwait(false);
-        await SyncAsync(ct).ConfigureAwait(false);
-    }
+        using var cancel = new NativeCancellation(ct);
+        NativeMethods.CheckProcess(NativeMethods.UciNewGame(_handle, cancel.Handle), ct);
+    }, CancellationToken.None);
 
     /// <summary>Searches the position reached from startFen (null for startpos) after the given UCI moves.</summary>
-    public async Task<UciSearchResult> SearchAsync(string? startFen, IEnumerable<string> moves, UciLimit limit,
+    public Task<UciSearchResult> SearchAsync(string? startFen, IEnumerable<string> moves, UciLimit limit,
         CancellationToken ct)
     {
         var moveList = string.Join(' ', moves);
-        var position = startFen is null ? "position startpos" : "position fen " + startFen;
-        if (moveList.Length > 0) position += " moves " + moveList;
-        await SendAsync(position).ConfigureAwait(false);
-        await SendAsync(limit.ToGoCommand()).ConfigureAwait(false);
-
-        var score = new UciScore(null, null);
-        var depth = 0;
-        IReadOnlyList<string> pv = [];
-        try
+        return Task.Run(() =>
         {
-            while (true)
-            {
-                var line = await _lines.Reader.ReadAsync(ct).ConfigureAwait(false);
-                if (line.StartsWith("info ", StringComparison.Ordinal))
-                {
-                    if (TryParseInfo(line, out var s, out var d, out var p))
-                    {
-                        score = s;
-                        depth = d;
-                        if (p.Count > 0) pv = p;
-                    }
-                }
-                else if (line.StartsWith("bestmove", StringComparison.Ordinal))
-                {
-                    var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    return new UciSearchResult(score, depth, parts.Length > 1 ? parts[1] : "", pv);
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Stop the search so the engine is usable (or at least quiet) afterwards.
-            await SendAsync("stop").ConfigureAwait(false);
-            throw;
-        }
+            using var cancel = new NativeCancellation(ct);
+            var nativeLimit = new NativeMethods.FcdUciLimit { Depth = limit.Depth, MoveTimeMs = limit.MoveTimeMs, Nodes = limit.Nodes };
+            var status = NativeMethods.UciSearch(_handle, startFen, moveList, nativeLimit, cancel.Handle, out var json);
+            NativeMethods.CheckProcess(status, ct);
+            var r = JsonSerializer.Deserialize(NativeMethods.TakeString(json), UciJsonContext.Default.UciSearchDto)!;
+            return new UciSearchResult(new UciScore(r.Cp, r.Mate), r.Depth, r.BestMove ?? "", r.Pv ?? []);
+        }, CancellationToken.None);
     }
 
     /// <summary>Parses the score, depth and pv of a UCI info line. Ignores bound and multipv>1 lines.</summary>
     public static bool TryParseInfo(string line, out UciScore score, out int depth, out IReadOnlyList<string> pv)
     {
-        score = default;
-        depth = 0;
-        pv = [];
-        var t = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var hasScore = false;
-        for (var i = 1; i < t.Length; i++)
-        {
-            switch (t[i])
-            {
-                case "depth" when i + 1 < t.Length:
-                    int.TryParse(t[++i], NumberStyles.Integer, CultureInfo.InvariantCulture, out depth);
-                    break;
-                case "multipv" when i + 1 < t.Length:
-                    if (t[++i] != "1") return false;
-                    break;
-                case "lowerbound" or "upperbound":
-                    return false;
-                case "score" when i + 2 < t.Length:
-                    var kind = t[++i];
-                    if (!int.TryParse(t[++i], NumberStyles.Integer, CultureInfo.InvariantCulture, out var v)) return false;
-                    score = kind == "mate" ? new UciScore(null, v) : new UciScore(v, null);
-                    hasScore = kind is "cp" or "mate";
-                    break;
-                case "pv":
-                    pv = t[(i + 1)..];
-                    i = t.Length;
-                    break;
-                case "string":
-                    i = t.Length;
-                    break;
-            }
-        }
-        return hasScore;
+        var status = NativeMethods.UciParseInfo(line, out var raw);
+        var json = NativeMethods.TakeChecked(status, raw);
+        var info = json == "null" ? null : JsonSerializer.Deserialize(json, UciJsonContext.Default.UciSearchDto);
+        score = info is null ? default : new UciScore(info.Cp, info.Mate);
+        depth = info?.Depth ?? 0;
+        pv = info?.Pv ?? [];
+        return info is not null;
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        try
-        {
-            if (!_process.HasExited)
-            {
-                await SendAsync("quit").ConfigureAwait(false);
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                try
-                {
-                    await _process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    _process.Kill(entireProcessTree: true);
-                }
-            }
-        }
-        catch (Exception e) when (e is IOException or InvalidOperationException)
-        {
-            // The engine already went away.
-        }
-        await _reader.ConfigureAwait(false);
-        _process.Dispose();
-    }
+    internal UciHandle Handle => _handle;
 
-    private async Task SendAsync(string command)
-    {
-        await _process.StandardInput.WriteLineAsync(command).ConfigureAwait(false);
-        await _process.StandardInput.FlushAsync().ConfigureAwait(false);
-    }
-
-    private async Task SyncAsync(CancellationToken ct)
-    {
-        await SendAsync("isready").ConfigureAwait(false);
-        await WaitForAsync(l => l == "readyok", TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
-    }
-
-    private async Task WaitForAsync(Func<string, bool> predicate, TimeSpan timeout, CancellationToken ct)
-    {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(timeout);
-        try
-        {
-            while (!predicate(await _lines.Reader.ReadAsync(cts.Token).ConfigureAwait(false)))
-            {
-            }
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
-            throw new TimeoutException($"Engine did not respond within {timeout.TotalSeconds:0} s.");
-        }
-        catch (ChannelClosedException)
-        {
-            throw new InvalidOperationException("Engine process exited unexpectedly.");
-        }
-    }
-
-    private async Task ReadLoopAsync()
-    {
-        try
-        {
-            while (await _process.StandardOutput.ReadLineAsync().ConfigureAwait(false) is { } line)
-                await _lines.Writer.WriteAsync(line.Trim()).ConfigureAwait(false);
-        }
-        finally
-        {
-            _lines.Writer.TryComplete();
-        }
-    }
+    /// <summary>Sends quit, waits up to two seconds, then stops the engine process.</summary>
+    public ValueTask DisposeAsync() => new(Task.Run(_handle.Dispose));
 }
+
+internal sealed record UciSearchDto(int? Cp, int? Mate, int Depth, string? BestMove, List<string>? Pv);
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(Dictionary<string, string>))]
+[JsonSerializable(typeof(UciSearchDto))]
+internal sealed partial class UciJsonContext : JsonSerializerContext;

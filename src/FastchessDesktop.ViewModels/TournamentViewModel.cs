@@ -357,8 +357,9 @@ public sealed partial class TournamentViewModel : ObservableObject
             }
         }
         catch (Exception e) when (e is IOException or InvalidOperationException or TimeoutException
-                                      or OperationCanceledException or System.ComponentModel.Win32Exception)
+                                      or OperationCanceledException or FastchessDesktop.Core.Native.FcdException)
         {
+            // FcdException: the file exists but could not be started (for example, not an executable).
             engine.Status = "Could not read the name from the engine: " + e.Message;
         }
     }

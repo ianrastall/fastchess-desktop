@@ -224,19 +224,10 @@ public sealed class TournamentViewModelTests : IDisposable
         Assert.False(_shell.Tournament.IsRunning);
     }
 
-    private static string? FakeEngine()
-    {
-        if (OperatingSystem.IsWindows()) return null;
-        var path = Path.Combine(AppContext.BaseDirectory, "fake_uci_engine.py");
-        File.SetUnixFileMode(path, File.GetUnixFileMode(path) | UnixFileMode.UserExecute);
-        return path;
-    }
-
     [Fact]
     public async Task Added_engines_take_the_name_they_report()
     {
-        var path = FakeEngine();
-        Assert.SkipWhen(path is null, "The fake engine is a Python script and runs only on Linux/macOS.");
+        var path = FastchessDesktop.Tests.FakePrograms.UciEngine;
         var vm = _shell.Tournament;
 
         _dialogs.Paths.Enqueue(path);

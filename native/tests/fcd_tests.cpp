@@ -1,5 +1,6 @@
 // Tests for the fcd_core C ABI: database, openings, exports. Uses only the public header.
-// Other groups: tools_tests.cpp (command lines, statistics, pairings).
+// Other groups: tools_tests.cpp (command lines, statistics, pairings), process_tests.cpp
+// (processes, UCI engines, analysis, tournaments).
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -278,6 +279,7 @@ int main() {
     test_ratings(dir);
     test_exports(dir);
     run_tools_tests();
+    run_process_tests();
     std::printf("%d checks, %d failures\n", fcd_test::g_checks, fcd_test::g_failures);
     return fcd_test::g_failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

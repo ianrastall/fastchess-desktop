@@ -1,4 +1,5 @@
 using FastchessDesktop.Core.Tools;
+using FastchessDesktop.Tests;
 
 namespace FastchessDesktop.Core.Tests;
 
@@ -60,51 +61,17 @@ public class TournamentFormatTests
     }
 }
 
-/// <summary>Drives <see cref="TournamentRunner"/> with an in-process stand-in for fastchess.</summary>
+/// <summary>
+/// Drives <see cref="TournamentRunner"/> (fcd_core) with the fake fastchess built with the native
+/// tests: it reads the real fastchess arguments and "plays" the games; the stronger engine wins
+/// every game and equal engines draw. Engine commands are strengths (native/tests/fake_fastchess.cpp).
+/// </summary>
 public class TournamentRunnerTests
 {
-    /// <summary>
-    /// Reads the real fastchess arguments and "plays" the games: the stronger engine wins every
-    /// game, equal engines draw. Prints fastchess-format progress lines.
-    /// </summary>
-    private sealed class FakeFastchess(Dictionary<string, int> strength, int failAtRun = 0)
-    {
-        public List<IReadOnlyList<string>> Runs { get; } = [];
-
-        public Task<ProcessResult> Launch(ProcessSpec spec, Action<OutputLine> onLine, CancellationToken ct)
-        {
-            var a = spec.Arguments;
-            Runs.Add(a);
-            if (Runs.Count == failAtRun) return Task.FromResult(new ProcessResult(1, TimeSpan.Zero, false));
-
-            var names = a.Where(x => x.StartsWith("name=", StringComparison.Ordinal)).Select(x => x[5..]).ToList();
-            var rounds = int.Parse(a[a.ToList().IndexOf("-rounds") + 1]);
-            var games = int.Parse(a[a.ToList().IndexOf("-games") + 1]);
-            var gauntlet = a[a.ToList().IndexOf("-tournament") + 1] == "gauntlet";
-            var pairs = gauntlet
-                ? names.Skip(1).Select(o => (names[0], o)).ToList()
-                : [.. from i in Enumerable.Range(0, names.Count) from j in Enumerable.Range(i + 1, names.Count - i - 1) select (names[i], names[j])];
-
-            var schedule = new List<(string W, string B)>();
-            for (var r = 0; r < rounds; r++)
-                foreach (var (x, y) in pairs)
-                    for (var g = 0; g < games; g++)
-                        schedule.Add(g % 2 == 0 ? (x, y) : (y, x));
-            for (var i = 0; i < schedule.Count; i++)
-            {
-                var (w, b) = schedule[i];
-                onLine(new OutputLine(OutputStream.StandardOutput, $"Started game {i + 1} of {schedule.Count} ({w} vs {b})"));
-                var result = strength[w] > strength[b] ? "1-0" : strength[w] < strength[b] ? "0-1" : "1/2-1/2";
-                onLine(new OutputLine(OutputStream.StandardOutput, $"Finished game {i + 1} ({w} vs {b}): {result} {{test}}"));
-            }
-            return Task.FromResult(new ProcessResult(0, TimeSpan.Zero, false));
-        }
-    }
-
-    private static TournamentSettings Settings(TournamentType type, params string[] names) => new()
+    private static TournamentSettings Settings(TournamentType type, params (string Name, string Strength)[] engines) => new()
     {
         Type = type,
-        Engines = [.. names.Select(n => new EngineSettings { Name = n, Command = n + ".exe" })],
+        Engines = [.. engines.Select(e => new EngineSettings { Name = e.Name, Command = e.Strength })],
         Rounds = 1,
         GamesPerEncounter = 2,
         PgnOut = "games.pgn",
@@ -112,95 +79,128 @@ public class TournamentRunnerTests
         SwissRounds = 3,
     };
 
-    private static async Task<(TournamentOutcome Outcome, List<FastchessEvent> Events)> RunAsync(
-        FakeFastchess fake, TournamentSettings settings)
+    private sealed record Result(TournamentOutcome Outcome, List<FastchessEvent> Events, List<OutputLine> Lines)
+    {
+        /// <summary>The arguments of each fastchess run, from the CommandStarted events.</summary>
+        public List<IReadOnlyList<string>> Runs =>
+            [.. Events.OfType<CommandStartedEvent>().Select(c => CommandLine.Split(c.CommandLine))];
+    }
+
+    private static async Task<Result> RunAsync(TournamentSettings settings)
     {
         var events = new List<FastchessEvent>();
-        var outcome = await new TournamentRunner(fake.Launch).RunAsync("fastchess", ".", settings, _ => { }, events.Add,
+        var lines = new List<OutputLine>();
+        var dir = Directory.CreateTempSubdirectory("fcd-runner-").FullName;
+        var outcome = await new TournamentRunner().RunAsync(FakePrograms.Fastchess, dir, settings,
+            l => { lock (lines) lines.Add(l); }, e => { lock (events) events.Add(e); },
             TestContext.Current.CancellationToken);
-        return (outcome, events);
+        return new Result(outcome, events, lines);
     }
+
+    private static IEnumerable<string> Names(IReadOnlyList<string> run) =>
+        run.Where(x => x.StartsWith("name=", StringComparison.Ordinal));
 
     [Fact]
     public async Task Knockout_strongest_engine_wins_with_continuous_game_numbers()
     {
-        var fake = new FakeFastchess(new() { ["A"] = 5, ["B"] = 4, ["C"] = 3, ["D"] = 2, ["E"] = 1 });
-        var (outcome, events) = await RunAsync(fake, Settings(TournamentType.Knockout, "A", "B", "C", "D", "E"));
+        var r = await RunAsync(Settings(TournamentType.Knockout, ("A", "5"), ("B", "4"), ("C", "3"), ("D", "2"), ("E", "1")));
 
-        Assert.False(outcome.Cancelled);
-        Assert.Equal(["A", "B", "C", "D", "E"], outcome.Ranking);
-        Assert.Equal(4, fake.Runs.Count); // D-E, then A-D and B-C, then the final
-        var numbers = events.OfType<GameFinishedEvent>().Select(e => e.Number).ToList();
-        Assert.Equal(Enumerable.Range(1, 8), numbers);
-        Assert.Contains(events, e => e is TournamentFinishedEvent { Message: "Knockout finished: A wins" });
+        Assert.False(r.Outcome.Cancelled);
+        Assert.Equal(["A", "B", "C", "D", "E"], r.Outcome.Ranking);
+        Assert.Equal(4, r.Runs.Count); // D-E, then A-D and B-C, then the final
+        Assert.Equal(Enumerable.Range(1, 8), r.Events.OfType<GameFinishedEvent>().Select(e => e.Number));
+        Assert.Contains(r.Events, e => e is TournamentFinishedEvent { Message: "Knockout finished: A wins" });
         // Only the first run may truncate the PGN; later runs append.
-        Assert.Contains("append=false", fake.Runs[0]);
-        Assert.All(fake.Runs.Skip(1), r => Assert.Contains("append=true", r));
+        Assert.Contains("append=false", r.Runs[0]);
+        Assert.All(r.Runs.Skip(1), run => Assert.Contains("append=true", run));
     }
 
     [Fact]
     public async Task Knockout_tie_plays_tiebreaks_then_the_higher_seed_advances()
     {
-        var fake = new FakeFastchess(new() { ["A"] = 1, ["B"] = 1 });
-        var (outcome, events) = await RunAsync(fake, Settings(TournamentType.Knockout, "A", "B"));
-        Assert.Equal(3, fake.Runs.Count); // the match and two tiebreaks
-        Assert.Equal("A", outcome.Ranking[0]);
-        Assert.Contains(events, e => e is TournamentNoteEvent n && n.Message.Contains("higher seed", StringComparison.Ordinal));
+        var r = await RunAsync(Settings(TournamentType.Knockout, ("A", "1"), ("B", "1")));
+        Assert.Equal(3, r.Runs.Count); // the match and two tiebreaks
+        Assert.Equal("A", r.Outcome.Ranking[0]);
+        Assert.Contains(r.Events, e => e is TournamentNoteEvent n && n.Message.Contains("higher seed", StringComparison.Ordinal));
     }
 
     [Fact]
     public async Task Swiss_plays_every_round_without_rematches()
     {
-        var fake = new FakeFastchess(new() { ["A"] = 4, ["B"] = 3, ["C"] = 2, ["D"] = 1 });
-        var (outcome, _) = await RunAsync(fake, Settings(TournamentType.Swiss, "A", "B", "C", "D"));
-        Assert.Equal(6, fake.Runs.Count); // 3 rounds x 2 pairings
-        var pairings = fake.Runs.Select(r => string.Join("-", r.Where(x => x.StartsWith("name=", StringComparison.Ordinal)).Order())).ToList();
+        var r = await RunAsync(Settings(TournamentType.Swiss, ("A", "4"), ("B", "3"), ("C", "2"), ("D", "1")));
+        Assert.Equal(6, r.Runs.Count); // 3 rounds x 2 pairings
+        var pairings = r.Runs.Select(run => string.Join("-", Names(run).Order())).ToList();
         Assert.Equal(pairings.Count, pairings.Distinct().Count());
-        Assert.Equal(["A", "B", "C", "D"], outcome.Ranking);
+        Assert.Equal(["A", "B", "C", "D"], r.Outcome.Ranking);
     }
 
     [Fact]
     public async Task Pyramid_adds_one_engine_per_stage()
     {
-        var fake = new FakeFastchess(new() { ["A"] = 1, ["B"] = 3, ["C"] = 2 });
-        var (outcome, events) = await RunAsync(fake, Settings(TournamentType.Pyramid, "A", "B", "C"));
-        Assert.Equal(2, fake.Runs.Count);
-        Assert.Equal(["name=B", "name=A"], fake.Runs[0].Where(x => x.StartsWith("name=", StringComparison.Ordinal)));
-        Assert.Equal(["name=C", "name=A", "name=B"], fake.Runs[1].Where(x => x.StartsWith("name=", StringComparison.Ordinal)));
-        Assert.All(fake.Runs, r => Assert.Contains("gauntlet", r));
-        Assert.Equal(["B", "C", "A"], outcome.Ranking);
-        Assert.Equal(2, events.OfType<StageStartedEvent>().Count());
+        var r = await RunAsync(Settings(TournamentType.Pyramid, ("A", "1"), ("B", "3"), ("C", "2")));
+        Assert.Equal(2, r.Runs.Count);
+        Assert.Equal(["name=B", "name=A"], Names(r.Runs[0]));
+        Assert.Equal(["name=C", "name=A", "name=B"], Names(r.Runs[1]));
+        Assert.All(r.Runs, run => Assert.Contains("gauntlet", run));
+        Assert.Equal(["B", "C", "A"], r.Outcome.Ranking);
+        Assert.Equal(2, r.Events.OfType<StageStartedEvent>().Count());
     }
 
     [Fact]
     public async Task A_failed_run_stops_the_tournament()
     {
-        var fake = new FakeFastchess(new() { ["A"] = 2, ["B"] = 1, ["C"] = 3, ["D"] = 0 }, failAtRun: 1);
-        var (outcome, _) = await RunAsync(fake, Settings(TournamentType.Swiss, "A", "B", "C", "D"));
-        Assert.Equal(1, outcome.ExitCode);
-        Assert.Single(fake.Runs);
-        Assert.Empty(outcome.Ranking);
+        var r = await RunAsync(Settings(TournamentType.Swiss, ("A", "fail"), ("B", "1"), ("C", "3"), ("D", "0")));
+        Assert.Equal(1, r.Outcome.ExitCode);
+        Assert.Single(r.Runs);
+        Assert.Empty(r.Outcome.Ranking);
     }
 
     [Fact]
     public async Task Round_robin_is_a_single_fastchess_run()
     {
-        var fake = new FakeFastchess(new() { ["A"] = 1, ["B"] = 2, ["C"] = 3 });
-        var (_, events) = await RunAsync(fake, Settings(TournamentType.RoundRobin, "A", "B", "C"));
-        Assert.Single(fake.Runs);
-        Assert.Equal(6, events.OfType<GameFinishedEvent>().Count());
+        var r = await RunAsync(Settings(TournamentType.RoundRobin, ("A", "1"), ("B", "2"), ("C", "3")));
+        Assert.Single(r.Runs);
+        Assert.Equal(6, r.Events.OfType<GameFinishedEvent>().Count());
+        // Every output line arrives as well, standard error included.
+        Assert.Contains(r.Lines, l => l.Stream == OutputStream.StandardError && l.Text == "fake fastchess: 3 engines");
+        Assert.Contains(r.Lines, l => l.Text == "Finished game 1 (A vs B): 0-1 {test}");
+    }
+
+    [Fact]
+    public async Task Stopping_ends_the_run_and_reports_it()
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var events = new List<FastchessEvent>();
+        var dir = Directory.CreateTempSubdirectory("fcd-runner-").FullName;
+        var outcome = await new TournamentRunner().RunAsync(FakePrograms.Fastchess, dir,
+            Settings(TournamentType.RoundRobin, ("A", "hang"), ("B", "1")),
+            _ => { }, e =>
+            {
+                lock (events) events.Add(e);
+                if (e is GameStartedEvent) cts.Cancel();
+            }, cts.Token);
+        Assert.True(outcome.Cancelled);
+        Assert.Contains(events, e => e is GameStartedEvent);
+    }
+
+    [Fact]
+    public async Task A_missing_fastchess_is_reported()
+    {
+        await Assert.ThrowsAsync<FileNotFoundException>(() => new TournamentRunner().RunAsync(
+            Path.Combine(AppContext.BaseDirectory, "no-fastchess.exe"), ".", Settings(TournamentType.RoundRobin, ("A", "1"), ("B", "2")),
+            _ => { }, _ => { }, TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public void Staged_formats_are_validated_and_previewed()
     {
-        var swiss = Settings(TournamentType.Swiss, "A", "B", "C") with { SwissRounds = 3, Sprt = true };
+        var swiss = Settings(TournamentType.Swiss, ("A", "1"), ("B", "1"), ("C", "1")) with { SwissRounds = 3, Sprt = true };
         var errors = FastchessCommandBuilder.Validate(swiss);
         Assert.Contains(errors, e => e.StartsWith("SPRT is only available", StringComparison.Ordinal));
         Assert.Contains(errors, e => e.StartsWith("Swiss rounds must be", StringComparison.Ordinal));
         Assert.Throws<ArgumentException>(() => FastchessCommandBuilder.Build(swiss));
         Assert.Contains("roundrobin", TournamentRunner.FirstStageArguments(swiss));
         // 5 engines: 3 Swiss rounds x 2 pairings (one bye) x 1 game pair x 2 games.
-        Assert.Equal(12, Settings(TournamentType.Swiss, "A", "B", "C", "D", "E").ExpectedGames);
+        Assert.Equal(12, Settings(TournamentType.Swiss, ("A", "1"), ("B", "1"), ("C", "1"), ("D", "1"), ("E", "1")).ExpectedGames);
     }
 }
