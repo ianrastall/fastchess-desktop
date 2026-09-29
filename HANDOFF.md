@@ -11,6 +11,27 @@ State of the repository on 2026-09-29, after the Stop fix and engine ratings fro
 | `FastchessDesktop.ViewModels` | Warnings as errors; 23 tests pass on Linux. |
 | `FastchessDesktop.App` | Changed in this pass (engine list template, legend, Sort button, rating list setting, tier brushes, `TierColors.cs`). Not compiled: the XAML compiler only runs on Windows. The last Windows build was package 1.0.271.30217, before this pass. |
 
+## Follow-up: adding engines did nothing (reported after installing this pass)
+
+The owner reported that after this pass Add engine did nothing: no engine in the list, empty
+fields, and the executable Browse button inert (it returns early when no engine is selected, so
+that follows from the first). The view-model flow was reproduced on Linux with the real UCERL list
+and saved engines and works, so the fault is in the WinUI layer or is an exception that never
+surfaced. Not reproduced; changes made:
+
+- `TierColors.For` looked a brush up in `Application.Current.Resources` from inside the engine list's
+  item template, the only new mechanism in the template. It now returns static brushes, as
+  `LogColors` does, and cannot throw. An exception inside a XAML binding can be swallowed and leave
+  the list without its items.
+- `App.UnhandledException` is handled: the exception goes to `errors.log` in the data folder and to
+  the tournament log, instead of ending the app or vanishing.
+- `UpdateRating` runs inside the Engines collection's change notification, before the list view
+  hears of the new engine. It now catches every exception (logged, engine left unrated).
+- Reordering (placement on add, Sort by rating) uses Remove and Insert instead of
+  `ObservableCollection.Move`.
+- `TierColors.cs` and the exception handler were compiled against the Windows App SDK on Linux
+  (C# compile step only, warnings as errors). The XAML is unchanged since the report.
+
 ## Changes In This Pass
 
 ### Stopping a tournament
@@ -200,6 +221,8 @@ owner's real tournament.
 
 ## Unresolved Issues
 
+- The cause of "adding engines does nothing" was not identified; see the follow-up section. The
+  next report should include errors.log and the tournament log.
 - The root cause of the reported Stop problem was not reproduced; see "Stopping a tournament" for
   what was fixed. If the page still locks up after Stop, the log now shows which stage it reached.
 - Engines not in the rating list (development builds, renamed binaries) are unrated; there is no

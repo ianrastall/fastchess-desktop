@@ -834,19 +834,27 @@ public sealed partial class TournamentViewModel : ObservableObject, IDisposable
         return _ratingList;
     }
 
-    /// <summary>Looks the engine up in the rating list by the name fastchess will use for it.</summary>
+    /// <summary>
+    /// Looks the engine up in the rating list by the name fastchess will use for it. It runs inside the
+    /// Engines collection's change notification, so a failure here would keep the engine out of the
+    /// list on screen: whatever goes wrong only leaves the engine unrated and is logged.
+    /// </summary>
     private void UpdateRating(EngineViewModel engine)
     {
-        var list = CurrentRatingList();
-        var name = FastchessCommandBuilder.EngineName(engine.ToSettings());
-        engine.RatingNote = _ratingListNote;
         try
         {
+            var list = CurrentRatingList();
+            var name = FastchessCommandBuilder.EngineName(engine.ToSettings());
+            engine.RatingNote = _ratingListNote;
             engine.Rating = list is null || name.Length == 0 ? null : list.Lookup(name);
         }
-        catch (FcdException)
+#pragma warning disable CA1031 // any failure only costs the rating
+        catch (Exception e)
+#pragma warning restore CA1031
         {
             engine.Rating = null;
+            engine.RatingNote = "The rating could not be looked up: " + e.Message;
+            Log.Add($"{engine.DisplayName}: the rating could not be looked up: {e.Message}", LogKind.Warning);
         }
     }
 
@@ -866,8 +874,8 @@ public sealed partial class TournamentViewModel : ObservableObject, IDisposable
         var sorted = Engines.OrderByDescending(e => e.Rating?.Rating ?? double.NegativeInfinity).ToList();
         for (var i = 0; i < sorted.Count; i++)
         {
-            var from = Engines.IndexOf(sorted[i]);
-            if (from != i) Engines.Move(from, i);
+            if (ReferenceEquals(Engines[i], sorted[i])) continue;
+            MoveEngine(sorted[i], i);
         }
         SelectedEngine = selected;
     }
@@ -882,8 +890,16 @@ public sealed partial class TournamentViewModel : ObservableObject, IDisposable
         var others = Engines.Where(e => !ReferenceEquals(e, engine)).ToList();
         var to = others.FindIndex(e => e.Rating is not { } r || r.Rating < rating.Rating);
         if (to < 0) to = others.Count;
-        var from = Engines.IndexOf(engine);
-        if (from != to) Engines.Move(from, to);
+        if (Engines.IndexOf(engine) != to) MoveEngine(engine, to);
         SelectedEngine = engine;
+    }
+
+    // Remove and insert rather than ObservableCollection.Move: the list view is only sure to follow
+    // the plain add and remove notifications. Removing the selected engine clears the selection;
+    // the callers restore it.
+    private void MoveEngine(EngineViewModel engine, int index)
+    {
+        Engines.Remove(engine);
+        Engines.Insert(index, engine);
     }
 }
