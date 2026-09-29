@@ -1,15 +1,16 @@
 # Handoff
 
-State of the repository on 2026-09-29, after moving the internals into the C++ core.
+State of the repository on 2026-09-29, after moving the internals into the C++ core and routing
+engine warnings out of the tournament log.
 
 ## Current State
 
 | Layer | Status |
 | --- | --- |
-| `native/` | 355 checks pass on Linux (GCC). The non-database parts (246 checks) also pass as a MinGW build under Wine. The MSVC build of the new code is not yet confirmed on Windows. |
-| `FastchessDesktop.Core` | A thin wrapper over the ABI. Warnings as errors; 77 tests pass on Linux against the native implementation, none skipped. |
-| `FastchessDesktop.ViewModels` | Warnings as errors; 20 tests pass on Linux. |
-| `FastchessDesktop.App` | Built and installed as MSIX on Windows by the owner (package 1.0.271.8108); a two-engine match ran from the installed app, with run folders in the real `%LOCALAPPDATA%\FastchessDesktop`. |
+| `native/` | 371 checks pass on Linux (GCC). The non-database parts (262 checks) also pass as a MinGW build under Wine. The owner built the core with MSVC 14.51 and ran all native and C# tests on Windows (before the engine-warning change). |
+| `FastchessDesktop.Core` | A thin wrapper over the ABI. Warnings as errors; 78 tests pass on Linux against the native implementation, none skipped. |
+| `FastchessDesktop.ViewModels` | Warnings as errors; 21 tests pass on Linux. |
+| `FastchessDesktop.App` | Built and installed as MSIX on Windows by the owner (package 1.0.271.30217, after the migration); a 500-game SPRT match ran from the installed app. |
 
 ## Changes In This Pass
 
@@ -27,8 +28,15 @@ State of the repository on 2026-09-29, after moving the internals into the C++ c
 
 - fastchess checks every engine's search output and prints a block ("Warning;", "Info;",
   "Position;", "Moves;") when, for example, the best move is not the first move of the last PV.
-  These are informational; they do not change moves or results. The log shows them in amber
-  (`LogKind.Warning`, classified by `FastchessOutputParser.Classify`).
+  The check is unconditional in fastchess (it fires without `-check-mate-pvs`) and the cause is
+  the engine: Peacekeeper 3.01 triggers it several times per game, Reckless 0.9.0 never. They do
+  not change moves or results.
+- The native runner (`EngineWarnings` in tournament.cpp) takes these blocks out of the output
+  lines, appends them to `engine-warnings.log` in the run's working directory and reports each
+  as an `engineWarning` event with a running count per engine and message. The tournament log
+  shows only the first of each message per engine, with an explanation and the file path; the
+  Warnings column counts all of them. A "Warning;" line that names no engine (a fastchess
+  problem such as CPU affinity) still appears in the log in amber.
 - Real engine failures show up as game end reasons: "loses on time", "disconnects",
   "connection stalls", "makes an illegal move", and as nonzero Timeouts/Crashed counts at the end.
   They are shown in red, and a summary line after each run counts them.
@@ -126,12 +134,12 @@ the C# tests and the thin wrapper layer.
 In the Linux container:
 
 - `native/`: `cmake --preset linux && cmake --build --preset linux && ./native/out/build/linux/fcd_tests`
-  (355 checks: database, tools, statistics, processes, UCI, analysis, tournaments).
+  (371 checks: database, tools, statistics, processes, UCI, analysis, tournaments, engine warnings).
 - Windows code paths: the native sources without the database, the fake programs and a test driver
-  built with MinGW (x86_64-w64-mingw32-g++-posix, static) and run under Wine 9: 246 checks pass,
+  built with MinGW (x86_64-w64-mingw32-g++-posix, static) and run under Wine 9: 262 checks pass,
   including cancellation and the cleanup of an orphaned child that holds the output pipes open.
   SQLite could not be fetched in the container, so the database is not part of that build.
-- `dotnet test` for both test projects (77 and 20 pass).
+- `dotnet test` for both test projects (78 and 21 pass).
 - The x:Bind checker, now also checking function bindings (263 paths and 30 function bindings,
   0 problems; confirmed to catch injected errors), and a stub compile of the App C#.
 - `dotnet restore` of the App project in both package modes; property and item evaluation of the
@@ -139,9 +147,11 @@ In the Linux container:
 - `package.ps1` parses without errors under PowerShell 7; its version and manifest-rewrite logic
   and its Windows PowerShell helper pattern were exercised under pwsh.
 
-Not verified: anything that needs real Windows and MSVC. That covers compiling the new native code
-with MSVC (only MinGW was used), job objects and the inherited-handle list on real Windows rather
-than Wine, the XAML compiler pass, and running the app.
+On Windows (by the owner, before the engine-warning change): `.\build.ps1` built the native core
+with MSVC 14.51 and passed 355 native checks, 77 Core and 20 ViewModel tests; `.\package.ps1`
+built and installed the MSIX, and a match ran from the installed app.
+
+Not verified: the engine-warning change with MSVC and in the app.
 
 ## Unresolved Issues
 
@@ -159,7 +169,7 @@ than Wine, the XAML compiler pass, and running the app.
 
 ## Next Recommended Action
 
-On Windows, from the repository root: `git pull`, then `.\build.ps1` (with tests: it builds the
-native core with MSVC and runs the native and C# tests, which now start real processes), then
-`.\package.ps1 -SkipTests`. Then run a short tournament, stop one midway, detect an engine name and
-analyze a game, and report any compiler errors or failing tests.
+On Windows, from the repository root: `git pull; .\build.ps1`, then `.\package.ps1 -SkipTests`.
+Run a match with an engine that triggers the PV warning (Peacekeeper 3.01) and check that the log
+shows one explanation line per engine, the Warnings column counts every occurrence, and
+`engine-warnings.log` in the run folder holds the full blocks.

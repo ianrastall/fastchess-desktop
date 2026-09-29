@@ -126,6 +126,7 @@ struct ParsedLine {
     std::optional<GameFinished> finished;
     std::optional<std::string> tournament_finished;  // "Tournament finished" or an SPRT conclusion
     std::optional<std::string> warning_engine;       // the engine a "Warning;" line is about
+    std::optional<std::string> warning_message;      // its text without the move and engine: "Illegal PV move"
 };
 
 ParsedLine parse_line(const std::string& line);

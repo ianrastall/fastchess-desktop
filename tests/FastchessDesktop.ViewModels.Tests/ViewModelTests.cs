@@ -217,6 +217,16 @@ public sealed class TournamentViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Engine_warnings_are_counted_in_the_standings()
+    {
+        var vm = _shell.Tournament;
+        vm.Apply(new GameFinishedEvent(1, "A", "B", "1-0", "White mates"));
+        vm.Apply(new EngineWarningEvent("B", "Bestmove does not match beginning of last PV", 1, "engine-warnings.log"));
+        vm.Apply(new EngineWarningEvent("B", "Bestmove does not match beginning of last PV", 2, "engine-warnings.log"));
+        Assert.Equal("2", vm.Standings.Rows.Single(r => r.Engine == "B").WarningsText);
+    }
+
+    [Fact]
     public async Task Start_reports_validation_errors_without_running()
     {
         await _shell.Tournament.StartCommand.ExecuteAsync(null);

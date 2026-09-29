@@ -14,6 +14,14 @@ public sealed record CommandStartedEvent(string CommandLine) : FastchessEvent;
 /// <summary>A message from the runner itself (pairings, byes, tiebreaks, final ranking).</summary>
 public sealed record TournamentNoteEvent(string Message) : FastchessEvent;
 
+/// <summary>
+/// fastchess flagged an engine's search output, for example a best move that is not the first move
+/// of the engine's last PV. Count is the occurrences of this message for this engine so far. The
+/// warning's lines are written to File (engine-warnings.log in the working directory) instead of
+/// being passed to onLine.
+/// </summary>
+public sealed record EngineWarningEvent(string Engine, string Message, int Count, string File) : FastchessEvent;
+
 public sealed record TournamentOutcome(bool Cancelled, int ExitCode, TimeSpan Duration, IReadOnlyList<string> Ranking);
 
 /// <summary>
@@ -26,7 +34,7 @@ public sealed class TournamentRunner
 {
     /// <summary>
     /// Runs the tournament and returns when it ends or is stopped. onLine receives every output line
-    /// and onEvent the parsed events, both from a background thread, one call at a time. A missing
+    /// except engine warnings (see <see cref="EngineWarningEvent"/>) and onEvent the parsed events, both from a background thread, one call at a time. A missing
     /// fastchess executable throws FileNotFoundException.
     /// </summary>
     public Task<TournamentOutcome> RunAsync(string fastchessPath, string workingDirectory, TournamentSettings settings,

@@ -6,6 +6,9 @@
 //   cmd=hang     print the first "Started game" line, then never finish (for cancellation)
 //   cmd=orphan   play normally, but leave a child process running that holds the output pipes
 //                open (as engines of a crashed fastchess would)
+//   cmd=warn     strength 0, and a fastchess engine warning block (Warning;, Info;, Position;,
+//                Moves;) about this engine in every game it plays
+//                (and, once, a fastchess warning that names no engine)
 // It also writes one line to standard error. "--sleep" runs the orphan child.
 #include <chrono>
 #include <cstdio>
@@ -75,6 +78,11 @@ int main(int argc, char** argv) {
     }
     std::fprintf(stderr, "fake fastchess: %d engines\n", static_cast<int>(engines.size()));
     std::fflush(stderr);
+    for (const auto& e : engines)
+        if (e.second == "warn") {
+            std::printf("Warning; Failed to set CPU affinity for the tournament thread.\n");
+            break;
+        }
 
     bool hang = false, orphan = false;
     for (const auto& e : engines) {
@@ -100,6 +108,14 @@ int main(int argc, char** argv) {
                     engines[w].first.c_str(), engines[b].first.c_str());
         std::fflush(stdout);
         if (hang) sleep_forever();
+        for (const size_t side : {w, b}) {
+            if (engines[side].second != "warn") continue;
+            std::printf("Warning; Bestmove does not match beginning of last PV - move e7e5 from %s\n"
+                        "Info; info depth 12 score cp 20 nodes 1000 time 5 pv c7c5 g1f3\n"
+                        "Position; startpos\n"
+                        "Moves; e2e4\n",
+                        engines[side].first.c_str());
+        }
         const char* result = strength(w) > strength(b) ? "1-0" : strength(w) < strength(b) ? "0-1" : "1/2-1/2";
         // A Windows-style line ending, as fastchess writes on Windows.
         std::printf("Finished game %d (%s vs %s): %s {test}\r\n", static_cast<int>(k + 1), engines[w].first.c_str(),

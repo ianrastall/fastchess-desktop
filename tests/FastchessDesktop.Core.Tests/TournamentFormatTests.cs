@@ -167,6 +167,24 @@ public class TournamentRunnerTests
     }
 
     [Fact]
+    public async Task Engine_warnings_become_counted_events_and_a_log_file()
+    {
+        var r = await RunAsync(Settings(TournamentType.RoundRobin, ("Peace Keeper", "warn"), ("B", "1")));
+
+        var warnings = r.Events.OfType<EngineWarningEvent>().ToList();
+        Assert.Equal([1, 2], warnings.Select(w => w.Count));
+        Assert.All(warnings, w => Assert.Equal("Peace Keeper", w.Engine));
+        Assert.Equal("Bestmove does not match beginning of last PV", warnings[0].Message);
+        // The warning blocks are not output lines; a warning that names no engine still is.
+        Assert.DoesNotContain(r.Lines, l => l.Text.StartsWith("Warning; Bestmove", StringComparison.Ordinal) ||
+                                            l.Text.StartsWith("Moves;", StringComparison.Ordinal));
+        Assert.Contains(r.Lines, l => l.Text.StartsWith("Warning; Failed to set CPU affinity", StringComparison.Ordinal));
+        var logged = File.ReadAllLines(warnings[0].File);
+        Assert.Equal(2, logged.Count(l => l.StartsWith("Warning; Bestmove", StringComparison.Ordinal)));
+        Assert.Equal(2, logged.Count(l => l.StartsWith("Position;", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public async Task Stopping_ends_the_run_and_reports_it()
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);

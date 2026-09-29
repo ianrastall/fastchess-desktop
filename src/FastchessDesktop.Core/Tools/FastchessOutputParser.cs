@@ -70,6 +70,7 @@ public static class FastchessOutputParser
         "stageStarted" => new StageStartedEvent(e.Stage, e.Description ?? ""),
         "commandStarted" => new CommandStartedEvent(e.CommandLine ?? ""),
         "note" => new TournamentNoteEvent(e.Message ?? ""),
+        "engineWarning" => new EngineWarningEvent(e.Engine ?? "", e.Message ?? "", e.Count, e.File ?? ""),
         _ => null,
     };
 }

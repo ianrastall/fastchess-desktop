@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <map>
 #include <mutex>
 #include <set>
@@ -55,6 +56,63 @@ std::string event(const char* type, std::initializer_list<std::pair<const char*,
     return out + "}";
 }
 
+// fastchess's checks on engine search output print a "Warning; ... from <engine>" line followed by
+// "Info;", "Position;" and "Moves;" lines (match.cpp), for every occurrence. An engine with a habit,
+// such as playing a move other than the first move of its last PV, repeats them all match long.
+// The blocks go to engine-warnings.log in the working directory instead of the output lines, and
+// each one is reported as an engineWarning event with a running count per engine and message.
+class EngineWarnings {
+   public:
+    explicit EngineWarnings(const std::string& working_directory) : path_(working_directory) {
+#ifdef _WIN32
+        const char separator = '\\';
+#else
+        const char separator = '/';
+#endif
+        if (!path_.empty() && path_.back() != '/' && path_.back() != '\\') path_ += separator;
+        path_ += "engine-warnings.log";
+    }
+
+    // True when the line belongs to an engine warning block and was handled here.
+    bool handle(const std::string& line, const fastchess::ParsedLine& p, const EventHandler& on_event) {
+        if (p.kind != fastchess::LineKind::Warning) {
+            in_block_ = false;
+            return false;
+        }
+        if (p.warning_engine) {
+            in_block_ = true;
+            const auto message = p.warning_message.value_or("");
+            const long long count = ++counts_[{*p.warning_engine, message}];
+            write("\n" + line);
+            if (on_event)
+                on_event(event("engineWarning",
+                               {{"engine", *p.warning_engine}, {"message", message}, {"file", path_}},
+                               {{"count", count}}));
+            return true;
+        }
+        // A "Warning;" line that names no engine is about fastchess itself and stays in the output.
+        if (!in_block_ || trim(line).rfind("Warning;", 0) == 0) {
+            in_block_ = false;
+            return false;
+        }
+        write(line);
+        return true;
+    }
+
+   private:
+    std::string path_;  // UTF-8
+    std::ofstream file_;
+    bool in_block_ = false;
+    std::map<std::pair<std::string, std::string>, long long> counts_;
+
+    void write(const std::string& text) {
+        if (!file_.is_open()) file_.open(utf8_path(path_), std::ios::binary | std::ios::app);
+        if (!file_) return;  // the log is a convenience; a failure to write it must not stop the tournament
+        file_ << text << '\n';
+        file_.flush();
+    }
+};
+
 // A fastchess run that failed or was stopped ends the tournament.
 struct StageFailed {
     process::RunResult result;
@@ -93,6 +151,7 @@ class Run {
 
    private:
     std::string fastchess_, working_directory_;
+    EngineWarnings warnings_{working_directory_};
     const TournamentSettings& settings_;
     const process::LineHandler& on_line_;
     const EventHandler& on_event_;
@@ -140,8 +199,9 @@ class Run {
         const auto result = process::run(
             o,
             [this](process::Stream stream, const std::string& line) {
-                if (on_line_) on_line_(stream, line);
                 const auto p = fastchess::parse_line(line);
+                if (warnings_.handle(line, p, on_event_)) return;
+                if (on_line_) on_line_(stream, line);
                 if (p.started)
                     emit(event("gameStarted", {{"white", p.started->white}, {"black", p.started->black}},
                                {{"number", p.started->number}, {"total", p.started->total}}));
@@ -170,8 +230,9 @@ class Run {
         const auto result = process::run(
             o,
             [&](process::Stream stream, const std::string& line) {
-                if (on_line_) on_line_(stream, line);
                 const auto p = fastchess::parse_line(line);
+                if (warnings_.handle(line, p, on_event_)) return;
+                if (on_line_) on_line_(stream, line);
                 if (p.started) {
                     const long long total = expected_ ? *expected_ : games_before_ + p.started->total;
                     emit(event("gameStarted", {{"white", p.started->white}, {"black", p.started->black}},

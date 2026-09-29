@@ -383,8 +383,15 @@ ParsedLine parse_line(const std::string& line) {
         if (trimmed.rfind(prefix, 0) != 0) continue;
         p.kind = LineKind::Warning;
         if (std::string_view(prefix) == "Warning;") {
-            // These end with "from <engine name>".
-            if (const auto at = trimmed.rfind(" from "); at != std::string::npos) p.warning_engine = trimmed.substr(at + 6);
+            // Engine warnings end with "from <engine name>", usually after " - move <move>":
+            // "Warning; Bestmove does not match beginning of last PV - move c6a4 from Peacekeeper 3.01".
+            if (const auto at = trimmed.rfind(" from "); at != std::string::npos) {
+                p.warning_engine = trimmed.substr(at + 6);
+                std::string message = trim(trimmed.substr(8, at - 8));
+                if (const auto dash = message.find(" - "); dash != std::string::npos) message = trim(message.substr(0, dash));
+                else if (message.size() >= 2 && message.compare(message.size() - 2, 2, " -") == 0) message = trim(message.substr(0, message.size() - 2));
+                p.warning_message = message;
+            }
         }
         break;
     }
@@ -422,6 +429,10 @@ std::string parsed_line_json(const ParsedLine& p) {
     out += ",\"warningEngine\":";
     if (p.warning_engine) json_string(out, *p.warning_engine);
     else out += "null";
+    if (p.warning_message) {
+        out += ",\"warningMessage\":";
+        json_string(out, *p.warning_message);
+    }
     return out + "}";
 }
 

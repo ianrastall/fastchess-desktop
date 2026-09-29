@@ -26,6 +26,10 @@ struct Outcome {
 //   {"type":"gameFinished","number","white","black","result","reason"}
 //   {"type":"tournamentFinished","message"}
 //   {"type":"note","message"}                 pairings, byes, tiebreaks, final ranking
+//   {"type":"engineWarning","engine","message","count","file"}
+//       fastchess flagged an engine's search output; count is the occurrences of this message for
+//       this engine so far. The warning's lines are written to file (engine-warnings.log in the
+//       working directory) and not passed to on_line.
 using EventHandler = std::function<void(const std::string&)>;
 
 Outcome run(const std::string& fastchess_path, const std::string& working_directory,

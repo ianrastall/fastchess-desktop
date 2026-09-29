@@ -194,6 +194,7 @@ FCD_API fcd_status fcd_engine_display_name(const char* name, const char* command
 
 /* Classifies and parses one line of fastchess output:
  * {"kind":"normal"|"warning"|"engineFailure", "event":null|EVENT, "warningEngine":null|"name"}
+ * plus "warningMessage" (the text without the move and engine) when warningEngine is set.
  * EVENT is {"type":"gameStarted","number","total","white","black"},
  * {"type":"gameFinished","number","white","black","result","reason"} or
  * {"type":"tournamentFinished","message"}. "warning" marks fastchess's checks on engine output
@@ -372,13 +373,18 @@ FCD_API fcd_status fcd_uci_analyze_game(fcd_uci* engine, const char* start_fen, 
  *   {"type":"gameFinished","number","white","black","result","reason"}
  *   {"type":"tournamentFinished","message"}
  *   {"type":"note","message"}                        pairings, byes, tiebreaks, final ranking
+ *   {"type":"engineWarning","engine","message","count","file"}
+ *       fastchess flagged an engine's search output (for example a best move that is not the
+ *       first move of the engine's last PV); count is the occurrences of this message for this
+ *       engine so far, and file the log (engine-warnings.log in the working directory) that
+ *       receives the warning's Warning;/Info;/Position;/Moves; lines.
  * Game numbers are continuous across the runs of a staged tournament. */
 typedef void (*fcd_event_fn)(void* user, const char* event_json);
 
 /* Runs a tournament of any format with fastchess and blocks until it ends. Round robin and gauntlet
  * are one fastchess run; pyramid, knockout and Swiss are a series of runs whose results decide the
- * next pairings, all appending to the same PGN. on_line receives every output line; on_event the
- * parsed events. Writes {"cancelled":bool,"exitCode":n,"durationMs":n,"ranking":[names]}; the ranking
+ * next pairings, all appending to the same PGN. on_line receives every output line except the
+ * engine warnings reported as engineWarning events; on_event the parsed events. Writes {"cancelled":bool,"exitCode":n,"durationMs":n,"ranking":[names]}; the ranking
  * is empty for round robin and gauntlet and when a run failed or was stopped. */
 FCD_API fcd_status fcd_tournament_run(const char* fastchess_path, const char* working_directory,
                                       const char* settings_json, fcd_line_fn on_line, fcd_event_fn on_event,

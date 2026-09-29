@@ -200,7 +200,7 @@ internal sealed record ParsedLineDto(string Kind, FastchessEventDto? Event, stri
 
 internal sealed record FastchessEventDto(
     string Type, int Number, int Total, string? White, string? Black, string? Result, string? Reason, string? Message,
-    int Stage, string? Description, string? CommandLine);
+    int Stage, string? Description, string? CommandLine, string? Engine = null, int Count = 0, string? File = null);
 
 /// <summary>JSON exchanged with the native tool functions: camelCase properties, enum member names.</summary>
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UseStringEnumConverter = true)]

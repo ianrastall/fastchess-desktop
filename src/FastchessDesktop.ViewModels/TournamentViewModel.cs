@@ -450,6 +450,7 @@ public sealed partial class TournamentViewModel : ObservableObject
         ResetResults(settings);
         _outputWarnings = 0;
         _engineFailures = 0;
+        _warningFile = null;
         GamesFinished = 0;
         GamesTotal = settings.ExpectedGames ?? 1;
         ProgressText = "Starting...";
@@ -532,20 +533,15 @@ public sealed partial class TournamentViewModel : ObservableObject
 
     private int _outputWarnings;
     private int _engineFailures;
+    private volatile string? _warningFile;
 
+    /// <summary>
+    /// Output lines from the runner. Engine warnings do not arrive here (they are EngineWarningEvents);
+    /// a "Warning;" line that does, such as a failed CPU affinity, is about fastchess itself.
+    /// </summary>
     private void OnOutputLine(OutputLine line)
     {
-        var (kind, evt, warningEngine) = FastchessOutputParser.Analyze(line.Text);
-        if (kind == FastchessLineKind.Warning && line.Text.TrimStart().StartsWith("Warning;", StringComparison.Ordinal))
-        {
-            Interlocked.Increment(ref _outputWarnings);
-            if (warningEngine is { } engine)
-                _dispatcher.Post(() =>
-                {
-                    _scoreboard.AddWarning(engine);
-                    UpdateStandings();
-                });
-        }
+        var (kind, evt, _) = FastchessOutputParser.Analyze(line.Text);
         if (kind == FastchessLineKind.EngineFailure && evt is GameFinishedEvent { IsEngineFailure: true })
             Interlocked.Increment(ref _engineFailures);
         Log.Add(line.Text, kind switch
@@ -567,9 +563,9 @@ public sealed partial class TournamentViewModel : ObservableObject
         else if (completed)
             Log.Add("No game ended by an engine failure (time loss, crash, stalled connection or illegal move).", LogKind.Success);
         if (warnings > 0)
-            Log.Add($"fastchess flagged {warnings} engine search output(s), shown in amber, for example a best move that is not " +
-                    "the first move of the engine's last reported PV. These are checks on what the engines print; " +
-                    "they do not change moves or results.", LogKind.Warning);
+            Log.Add($"fastchess flagged {warnings} engine search output(s) (see the Warnings column), for example a best " +
+                    "move that is not the first move of the engine's last reported PV. These are checks on what the engines " +
+                    $"print; they do not change moves or results. Details: {_warningFile}", LogKind.Warning);
     }
 
     /// <summary>Runner events arrive on a background thread: log lines now (keeps their order), UI state on the UI thread.</summary>
@@ -585,6 +581,16 @@ public sealed partial class TournamentViewModel : ObservableObject
                 break;
             case TournamentNoteEvent n:
                 Log.Add(n.Message, LogKind.Success);
+                break;
+            case EngineWarningEvent w:
+                Interlocked.Increment(ref _outputWarnings);
+                _warningFile = w.File;
+                // Only the first of each kind per engine is logged; an engine with a habit repeats it every game.
+                if (w.Count == 1)
+                    Log.Add($"{w.Engine}: {w.Message}. fastchess checks what each engine prints while it searches; this " +
+                            "comes from the engine itself and does not change moves or results. Further occurrences " +
+                            "are not shown here: they are counted in the Warnings column and written, with the position " +
+                            $"and moves, to {w.File}", LogKind.Warning);
                 break;
         }
         _dispatcher.Post(() => Apply(evt));
@@ -614,6 +620,10 @@ public sealed partial class TournamentViewModel : ObservableObject
                 break;
             case TournamentFinishedEvent t:
                 ProgressText = t.Message;
+                break;
+            case EngineWarningEvent w:
+                _scoreboard.AddWarning(w.Engine);
+                UpdateStandings();
                 break;
         }
     }

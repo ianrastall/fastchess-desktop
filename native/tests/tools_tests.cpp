@@ -127,6 +127,11 @@ void test_output_parser() {
     const std::string warning = take(out);
     CHECK(contains(warning, R"("kind":"warning")"));
     CHECK(contains(warning, R"("warningEngine":"Berserk 14")"));
+    CHECK(contains(warning, R"("warningMessage":"Bestmove does not match beginning of last PV")"));
+    CHECK_OK(fcd_fastchess_parse_line("Warning; Incomplete mating PV - from Engine X 2.0", &out));
+    CHECK(contains(take(out), R"("warningEngine":"Engine X 2.0","warningMessage":"Incomplete mating PV")"));
+    CHECK_OK(fcd_fastchess_parse_line("Warning; Failed to set CPU affinity for the tournament thread.", &out));
+    CHECK(take(out) == R"({"kind":"warning","event":null,"warningEngine":null})");
     CHECK_OK(fcd_fastchess_parse_line("Moves; d1d2 c6d4 e3d4", &out));
     CHECK(contains(take(out), R"("kind":"warning","event":null,"warningEngine":null)"));
     CHECK_OK(fcd_fastchess_parse_line("  Timeouts: 3", &out));

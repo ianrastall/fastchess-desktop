@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -241,6 +242,34 @@ void test_tournaments() {
         CHECK(count_containing(c.events, R"("message":"Tournament finished")") == 1);
         CHECK(contains(outcome, R"("ranking":[])"));
         CHECK(c.lines.size() >= 13);  // every output line reaches on_line as well
+    }
+    {
+        // Engine warning blocks go to engine-warnings.log and engineWarning events, not to on_line.
+        const auto log = work_dir() / "engine-warnings.log";
+        std::filesystem::remove(log);
+        Collected c;
+        run_tournament(settings("RoundRobin", engines_json({{"Peace Keeper", "warn"}, {"B", "1"}})), c);
+        std::vector<std::string> warnings;
+        for (const auto& e : c.events)
+            if (contains(e, "\"engineWarning\"")) warnings.push_back(e);
+        CHECK(warnings.size() == 2);
+        CHECK(warnings.size() == 2 && contains(warnings[0], R"("count":1)") && contains(warnings[1], R"("count":2)"));
+        CHECK(warnings.size() == 2 && contains(warnings[0], R"("engine":"Peace Keeper")") &&
+              contains(warnings[0], R"("message":"Bestmove does not match beginning of last PV")") &&
+              contains(warnings[0], "engine-warnings.log"));
+        std::vector<std::string> texts;
+        for (const auto& [stream, text] : c.lines) texts.push_back(text);
+        CHECK(count_containing(texts, "Bestmove") == 0);
+        CHECK(count_containing(texts, "Info;") == 0 && count_containing(texts, "Position;") == 0 &&
+              count_containing(texts, "Moves;") == 0);
+        CHECK(count_containing(texts, "Failed to set CPU affinity") == 1);  // names no engine: stays
+        CHECK(count_containing(texts, "Finished game") == 2);
+        std::ifstream in(log, std::ios::binary);
+        std::vector<std::string> logged;
+        for (std::string l; std::getline(in, l);) logged.push_back(l);
+        CHECK(count_containing(logged, "Warning; Bestmove") == 2);
+        CHECK(count_containing(logged, "Moves; e2e4") == 2);
+        CHECK(count_containing(logged, "affinity") == 0);
     }
 }
 
