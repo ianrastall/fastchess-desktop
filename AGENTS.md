@@ -59,6 +59,13 @@ before changing a command builder. Known constraints already encoded:
 - Ordoprep: at most one of `-d`, `-m`, `-M`, `-g`, `--major-only` per run.
 - pgn-extract: the ECO file is attached to the switch (`-e<path>`).
 
+## Git Workflow
+
+- Work on `main` and commit to `main`. Do not create feature branches or pull requests.
+- The owner explicitly permits pushing to `main`. If a session is started on another branch,
+  switch to `main` (fast-forward it with the session's work if needed) instead of leaving work
+  on a side branch for the owner to merge.
+
 ## Verification
 
 - The native core and the C# libraries build and test on Linux as well as Windows (see HANDOFF.md).
