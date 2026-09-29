@@ -54,9 +54,9 @@
 
             <TextBlock Text="Analysis (Stockfish)" Style="{StaticResource SectionHeaderStyle}" />
             <StackPanel Orientation="Horizontal" Spacing="12">
-                <NumberBox Header="Depth" Minimum="0" Width="120" SpinButtonPlacementMode="Compact" Value="{x:Bind ViewModel.AnalysisDepth, Mode=TwoWay}" />
+                <NumberBox Header="Depth" Minimum="0" Width="120" Value="{x:Bind ViewModel.AnalysisDepth, Mode=TwoWay}" />
                 <NumberBox Header="Time per position (ms, 0 = off)" Minimum="0" Width="220" Value="{x:Bind ViewModel.AnalysisMoveTimeMs, Mode=TwoWay}" />
-                <NumberBox Header="Threads" Minimum="1" Width="120" SpinButtonPlacementMode="Compact" Value="{x:Bind ViewModel.AnalysisThreads, Mode=TwoWay}" />
+                <NumberBox Header="Threads" Minimum="1" Width="120" Value="{x:Bind ViewModel.AnalysisThreads, Mode=TwoWay}" />
                 <NumberBox Header="Hash (MB)" Minimum="1" Width="140" Value="{x:Bind ViewModel.AnalysisHashMb, Mode=TwoWay}" />
             </StackPanel>
 

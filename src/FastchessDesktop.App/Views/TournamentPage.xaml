@@ -5,17 +5,19 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="using:FastchessDesktop.ViewModels"
     xmlns:views="using:FastchessDesktop.App.Views"
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
     NavigationCacheMode="Required">
 
-    <Grid Padding="16,8,16,16" ColumnSpacing="16">
+    <Grid Padding="16,8,16,16">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="600" />
-            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="600" MinWidth="360" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" MinWidth="360" />
         </Grid.ColumnDefinitions>
 
-        <!-- Configuration -->
-        <ScrollViewer Padding="0,0,12,0">
-            <StackPanel Spacing="8">
+        <!-- Configuration. The right margin keeps content clear of the overlay scroll bar. -->
+        <ScrollViewer>
+            <StackPanel Spacing="8" Margin="0,0,20,0">
 
                 <Expander Header="Engines" IsExpanded="True" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                           IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}">
@@ -47,8 +49,19 @@
                         </ListView>
 
                         <StackPanel Grid.Row="1" Grid.Column="1" Spacing="8">
-                            <TextBox Header="Name (defaults to the file name)"
-                                     Text="{x:Bind ViewModel.SelectedEngine.Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            <Grid ColumnSpacing="4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Header="Name (read from the engine)"
+                                         Text="{x:Bind ViewModel.SelectedEngine.Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Grid.Column="1" VerticalAlignment="Bottom" Content="Detect"
+                                        ToolTipService.ToolTip="Start the engine and use the name it reports"
+                                        Command="{x:Bind ViewModel.DetectEngineNameCommand}" />
+                            </Grid>
+                            <TextBlock Text="{x:Bind ViewModel.SelectedEngine.Status, Mode=OneWay}" TextWrapping="Wrap"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <Grid ColumnSpacing="4">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -91,14 +104,14 @@
                             <ComboBoxItem Content="Round robin" />
                             <ComboBoxItem Content="Gauntlet" />
                         </ComboBox>
-                        <NumberBox Grid.Column="1" Header="Gauntlet seeds" Minimum="1" SpinButtonPlacementMode="Compact"
+                        <NumberBox Grid.Column="1" Header="Gauntlet seeds" Minimum="1"
                                    Value="{x:Bind ViewModel.Seeds, Mode=TwoWay}" />
-                        <NumberBox Grid.Column="2" Header="Rounds" Minimum="1" SpinButtonPlacementMode="Compact"
+                        <NumberBox Grid.Column="2" Header="Rounds" Minimum="1"
                                    Value="{x:Bind ViewModel.Rounds, Mode=TwoWay}" />
 
-                        <NumberBox Grid.Row="1" Header="Games per encounter" Minimum="1" Maximum="2" SpinButtonPlacementMode="Compact"
+                        <NumberBox Grid.Row="1" Header="Games per encounter" Minimum="1" Maximum="2"
                                    Value="{x:Bind ViewModel.GamesPerEncounter, Mode=TwoWay}" />
-                        <NumberBox Grid.Row="1" Grid.Column="1" Header="Concurrency (0 = all threads)" SpinButtonPlacementMode="Compact"
+                        <NumberBox Grid.Row="1" Grid.Column="1" Header="Concurrency (0 = all threads)"
                                    Value="{x:Bind ViewModel.Concurrency, Mode=TwoWay}" />
                         <CheckBox Grid.Row="1" Grid.Column="2" VerticalAlignment="Bottom" Content="Force concurrency"
                                   IsChecked="{x:Bind ViewModel.ForceConcurrency, Mode=TwoWay}" />
@@ -114,20 +127,20 @@
                                  Text="{x:Bind ViewModel.TimeControl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  Visibility="{x:Bind ViewModel.IsTimeControlLimit, Mode=OneWay}" />
                         <NumberBox Grid.Row="2" Grid.Column="1" Header="Seconds per move" Minimum="0" SmallChange="0.1"
-                                   SpinButtonPlacementMode="Compact" Value="{x:Bind ViewModel.MoveTimeSeconds, Mode=TwoWay}"
+                                   Value="{x:Bind ViewModel.MoveTimeSeconds, Mode=TwoWay}"
                                    Visibility="{x:Bind ViewModel.IsMoveTimeLimit, Mode=OneWay}" />
                         <NumberBox Grid.Row="2" Grid.Column="1" Header="Nodes per move" Minimum="1"
                                    Value="{x:Bind ViewModel.Nodes, Mode=TwoWay}"
                                    Visibility="{x:Bind ViewModel.IsNodesLimit, Mode=OneWay}" />
-                        <NumberBox Grid.Row="2" Grid.Column="1" Header="Depth" Minimum="1" SpinButtonPlacementMode="Compact"
+                        <NumberBox Grid.Row="2" Grid.Column="1" Header="Depth" Minimum="1"
                                    Value="{x:Bind ViewModel.Depth, Mode=TwoWay}"
                                    Visibility="{x:Bind ViewModel.IsDepthLimit, Mode=OneWay}" />
-                        <NumberBox Grid.Row="2" Grid.Column="2" Header="Time margin (ms)" Minimum="0" SpinButtonPlacementMode="Compact"
+                        <NumberBox Grid.Row="2" Grid.Column="2" Header="Time margin (ms)" Minimum="0"
                                    Value="{x:Bind ViewModel.TimeMarginMs, Mode=TwoWay}" />
 
-                        <NumberBox Grid.Row="3" Header="Threads per engine (0 = unset)" Minimum="0" SpinButtonPlacementMode="Compact"
+                        <NumberBox Grid.Row="3" Header="Threads per engine (0 = unset)" Minimum="0"
                                    Value="{x:Bind ViewModel.Threads, Mode=TwoWay}" />
-                        <NumberBox Grid.Row="3" Grid.Column="1" Header="Hash MB per engine (0 = unset)" Minimum="0" SpinButtonPlacementMode="Compact"
+                        <NumberBox Grid.Row="3" Grid.Column="1" Header="Hash MB per engine (0 = unset)" Minimum="0"
                                    Value="{x:Bind ViewModel.HashMb, Mode=TwoWay}" />
                     </Grid>
                 </Expander>
@@ -303,8 +316,11 @@
             </StackPanel>
         </ScrollViewer>
 
+        <!-- Drag to resize the two panels. -->
+        <toolkit:GridSplitter Grid.Column="1" Width="12" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" />
+
         <!-- Run control and output -->
-        <Grid Grid.Column="1" RowSpacing="8">
+        <Grid Grid.Column="2" RowSpacing="8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />

@@ -152,6 +152,47 @@ public sealed class TournamentViewModelTests : IDisposable
         Assert.False(_shell.Tournament.IsRunning);
     }
 
+    private static string? FakeEngine()
+    {
+        if (OperatingSystem.IsWindows()) return null;
+        var path = Path.Combine(AppContext.BaseDirectory, "fake_uci_engine.py");
+        File.SetUnixFileMode(path, File.GetUnixFileMode(path) | UnixFileMode.UserExecute);
+        return path;
+    }
+
+    [Fact]
+    public async Task Added_engines_take_the_name_they_report()
+    {
+        var path = FakeEngine();
+        Assert.SkipWhen(path is null, "The fake engine is a Python script and runs only on Linux/macOS.");
+        var vm = _shell.Tournament;
+
+        _dialogs.Paths.Enqueue(path);
+        await vm.AddEngineCommand.ExecuteAsync(null);
+        Assert.Equal("FakeEngine 1.0", vm.Engines[0].Name);
+        Assert.Equal("Name reported by the engine.", vm.Engines[0].Status);
+
+        // A second copy gets a distinct name, as fastchess requires.
+        _dialogs.Paths.Enqueue(path);
+        await vm.AddEngineCommand.ExecuteAsync(null);
+        Assert.Equal("FakeEngine 1.0 (2)", vm.Engines[1].Name);
+        Assert.Same(vm.Engines[1], vm.SelectedEngine);
+
+        vm.Engines[1].Name = "My build";
+        await vm.DetectEngineNameCommand.ExecuteAsync(null);
+        Assert.Equal("FakeEngine 1.0 (2)", vm.Engines[1].Name);
+    }
+
+    [Fact]
+    public async Task Missing_executable_keeps_the_provisional_name()
+    {
+        var vm = _shell.Tournament;
+        _dialogs.Paths.Enqueue(Path.Combine(_env.AppDirectory, "gone", "stockfish-19.exe"));
+        await vm.AddEngineCommand.ExecuteAsync(null);
+        Assert.Equal("stockfish-19", vm.Engines[0].Name);
+        Assert.Equal("Executable not found.", vm.Engines[0].Status);
+    }
+
     [Fact]
     public void Engine_options_parse_name_value_lines()
     {

@@ -18,6 +18,9 @@ public sealed partial class EngineViewModel : ObservableObject
     [ObservableProperty] public partial string WorkingDirectory { get; set; } = "";
     [ObservableProperty] public partial string OptionsText { get; set; } = "";
 
+    /// <summary>Result of the last name detection, shown under the name field.</summary>
+    [ObservableProperty] public partial string Status { get; set; } = "";
+
     public string DisplayName
     {
         get

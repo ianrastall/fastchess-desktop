@@ -6,6 +6,7 @@
     xmlns:vm="using:FastchessDesktop.ViewModels"
     xmlns:models="using:FastchessDesktop.Core.Models"
     xmlns:views="using:FastchessDesktop.App.Views"
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
     NavigationCacheMode="Required">
 
     <Grid Padding="16,8,16,16" RowSpacing="8">
@@ -114,10 +115,11 @@
             </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="3" ColumnSpacing="16">
+        <Grid Grid.Row="3">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="400" />
+                <ColumnDefinition Width="*" MinWidth="400" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="400" MinWidth="280" />
             </Grid.ColumnDefinitions>
 
             <!-- Game table -->
@@ -220,8 +222,11 @@
                 </ListView>
             </Grid>
 
+            <!-- Drag to resize the table and the side panel. -->
+            <toolkit:GridSplitter Grid.Column="1" Width="12" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" />
+
             <!-- Selected game, ratings, activity -->
-            <Pivot Grid.Column="1">
+            <Pivot Grid.Column="2">
                 <PivotItem Header="Game">
                     <ScrollViewer Margin="0,8,0,0">
                         <StackPanel Spacing="8">

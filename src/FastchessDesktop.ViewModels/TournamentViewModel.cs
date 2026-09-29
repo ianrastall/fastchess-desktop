@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using FastchessDesktop.Core.Engines;
 using FastchessDesktop.Core.Tools;
 using FastchessDesktop.ViewModels.Services;
 
@@ -53,7 +54,7 @@ public sealed partial class TournamentViewModel : ObservableObject
     public ObservableCollection<StandingRow> Standings { get; } = [];
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(RemoveEngineCommand), nameof(DuplicateEngineCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RemoveEngineCommand), nameof(DuplicateEngineCommand), nameof(DetectEngineNameCommand))]
     public partial EngineViewModel? SelectedEngine { get; set; }
 
     // Schedule. Indices map to the enums in FastchessDesktop.Core.Tools; numbers are double for NumberBox.
@@ -270,14 +271,70 @@ public sealed partial class TournamentViewModel : ObservableObject
         UpdatePreview();
     }
 
+    /// <summary>Adds an engine: the file name is shown at once, then replaced by the name the engine reports over UCI.</summary>
     [RelayCommand]
     private async Task AddEngineAsync()
     {
         var path = await _dialogs.PickOpenFileAsync(FileFilters.Executable);
         if (path is null) return;
         var engine = new EngineViewModel { Command = path };
+        engine.Name = UniqueName(Path.GetFileNameWithoutExtension(path), engine);
         Engines.Add(engine);
         SelectedEngine = engine;
+        await DetectNameAsync(engine, keepUserEdits: true);
+    }
+
+    [RelayCommand(CanExecute = nameof(HasSelectedEngine))]
+    private Task DetectEngineNameAsync() =>
+        SelectedEngine is { } engine ? DetectNameAsync(engine, keepUserEdits: false) : Task.CompletedTask;
+
+    /// <summary>
+    /// Starts the engine briefly and reads its UCI "id name". With keepUserEdits, a name typed while
+    /// the engine was starting is left alone.
+    /// </summary>
+    private async Task DetectNameAsync(EngineViewModel engine, bool keepUserEdits)
+    {
+        var provisional = engine.Name;
+        if (!File.Exists(engine.Command))
+        {
+            engine.Status = "Executable not found.";
+            return;
+        }
+        engine.Status = "Asking the engine for its name...";
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await using var uci = await UciEngine.StartAsync(engine.Command, new Dictionary<string, string>(), cts.Token);
+            var reported = uci.Name.Trim();
+            if (reported.Length == 0)
+            {
+                engine.Status = "The engine did not report a name.";
+            }
+            else if (keepUserEdits && engine.Name != provisional)
+            {
+                engine.Status = $"The engine reports \"{reported}\"; your name was kept.";
+            }
+            else
+            {
+                engine.Name = UniqueName(reported, engine);
+                engine.Status = "Name reported by the engine.";
+            }
+        }
+        catch (Exception e) when (e is IOException or InvalidOperationException or TimeoutException
+                                      or OperationCanceledException or System.ComponentModel.Win32Exception)
+        {
+            engine.Status = "Could not read the name from the engine: " + e.Message;
+        }
+    }
+
+    /// <summary>fastchess needs distinct names; appends " (2)", " (3)" ... when another engine already uses one.</summary>
+    private string UniqueName(string name, EngineViewModel self)
+    {
+        bool Taken(string n) => Engines.Any(e => !ReferenceEquals(e, self) &&
+                                                 string.Equals(e.DisplayName, n, StringComparison.Ordinal));
+        if (!Taken(name)) return name;
+        for (var i = 2; ; i++)
+            if (!Taken($"{name} ({i})")) return $"{name} ({i})";
     }
 
     [RelayCommand(CanExecute = nameof(HasSelectedEngine))]
@@ -304,9 +361,12 @@ public sealed partial class TournamentViewModel : ObservableObject
     [RelayCommand]
     private async Task BrowseEngineCommandAsync()
     {
-        if (SelectedEngine is null) return;
+        if (SelectedEngine is not { } engine) return;
         var path = await _dialogs.PickOpenFileAsync(FileFilters.Executable);
-        if (path is not null) SelectedEngine.Command = path;
+        if (path is null) return;
+        engine.Command = path;
+        engine.Name = UniqueName(Path.GetFileNameWithoutExtension(path), engine);
+        await DetectNameAsync(engine, keepUserEdits: true);
     }
 
     [RelayCommand]

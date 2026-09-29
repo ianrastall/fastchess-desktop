@@ -27,5 +27,6 @@
     <None Include="$(RepositoryRoot)native/out/build/linux/libfcd_core.so" Condition="Exists('$(RepositoryRoot)native/out/build/linux/libfcd_core.so')" CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <None Include="$(RepositoryRoot)native/tests/data/sample.pgn" Link="data/sample.pgn" CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(RepositoryRoot)assets/lichess-openings/lichess-openings.tsv" Link="data/lichess-openings.tsv" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\FastchessDesktop.Core.Tests\fake_uci_engine.py" Link="fake_uci_engine.py" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
