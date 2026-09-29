@@ -36,17 +36,14 @@
     <ProjectReference Include="..\FastchessDesktop.ViewModels\FastchessDesktop.ViewModels.csproj" />
   </ItemGroup>
 
-  <!-- Native core: configure and build with CMake (needs cmake on PATH and VCPKG_ROOT for SQLite). -->
+  <!-- Native core: native\build-native.ps1 uses Visual Studio's own CMake and vcpkg (see that script). -->
   <ItemGroup>
-    <NativeSource Include="$(NativeDir)src\**\*;$(NativeDir)include\**\*;$(NativeDir)CMakeLists.txt;$(NativeDir)CMakePresets.json;$(NativeDir)vcpkg.json" />
+    <NativeSource Include="$(NativeDir)src\**\*;$(NativeDir)include\**\*;$(NativeDir)CMakeLists.txt;$(NativeDir)CMakePresets.json;$(NativeDir)vcpkg.json;$(NativeDir)build-native.ps1" />
   </ItemGroup>
 
   <Target Name="BuildNativeCore" BeforeTargets="BeforeBuild" Condition="'$(BuildNative)' == 'true'"
           Inputs="@(NativeSource)" Outputs="$(NativeDll)">
-    <Error Condition="'$(VCPKG_ROOT)' == ''"
-           Text="VCPKG_ROOT is not set. Install vcpkg (or use a Visual Studio Developer PowerShell, which sets it) or build native/ yourself and pass -p:BuildNative=false. See README.md." />
-    <Exec Command="cmake --preset windows-x64" WorkingDirectory="$(NativeDir)" />
-    <Exec Command="cmake --build --preset windows-x64-$(NativeConfiguration.ToLowerInvariant())" WorkingDirectory="$(NativeDir)" />
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(NativeDir)build-native.ps1&quot; -Configuration $(NativeConfiguration)" />
   </Target>
 
   <Target Name="CopyNativeCore" AfterTargets="Build">

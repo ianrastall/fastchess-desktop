@@ -51,13 +51,16 @@ Key decisions:
 
 - Windows 10 (1809) or later, x64
 - Visual Studio 2022 17.14 or later (or Visual Studio 2026) with the **.NET desktop development**
-  and **Desktop development with C++** workloads (includes CMake and vcpkg)
+  and **Desktop development with C++** workloads, including the **C++ CMake tools for Windows**
+  and **vcpkg package manager** components
 - .NET 10 SDK
-- `VCPKG_ROOT` set (a Visual Studio Developer PowerShell sets it) so CMake can get SQLite
+
+The native build always uses the CMake and vcpkg that ship with Visual Studio (found with
+`vswhere`), so other CMake installs on PATH, such as MSYS2 or MinGW, do not interfere.
 
 ## Build
 
-From a Developer PowerShell for Visual Studio, in the repository root:
+From any PowerShell window, in the repository root:
 
 ```powershell
 .\build.ps1
@@ -67,8 +70,8 @@ This configures and builds `native/` with CMake and vcpkg, runs the native and C
 the app. Use `.\build.ps1 -Configuration Debug -SkipTests` for a quick debug build.
 
 Opening `FastchessDesktop.slnx` in Visual Studio and building the App project also works: its
-`BuildNativeCore` target runs CMake when the native sources changed (pass `-p:BuildNative=false`
-to skip that when you build `native/` yourself).
+`BuildNativeCore` target runs `native\build-native.ps1` when the native sources changed (pass
+`-p:BuildNative=false` to skip that when you build `native/` yourself).
 
 ## Run
 
@@ -99,7 +102,7 @@ Game databases (`.fcdb`, SQLite) are wherever you create them.
 Native (any OS with CMake, a C++20 compiler and SQLite development files):
 
 ```powershell
-cmake --preset windows-x64; cmake --build --preset windows-x64-release; .\native\out\build\windows-x64\Release\fcd_tests.exe
+.\native\build-native.ps1 -Configuration Release -Test
 ```
 
 On Linux: `cmake --preset linux && cmake --build --preset linux && ./native/out/build/linux/fcd_tests`.

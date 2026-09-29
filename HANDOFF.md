@@ -65,8 +65,15 @@ for the layout. `.gitignore` gained `native/out/`.
 - Analysis results are not written into exported PGN comments.
 - No installer or publish profile.
 
+## Windows Build Notes
+
+- First Windows run (2026-09-29) failed because an MSYS2 `cmake.exe` came first on PATH: it chose
+  the Ninja generator and broke the vcpkg SQLite build. `native\build-native.ps1` now uses Visual
+  Studio's CMake, Ninja and vcpkg explicitly, strips MSYS2/MinGW/Cygwin from PATH for the build
+  only, and removes a build folder configured by another generator.
+
 ## Next Recommended Action
 
-On Windows, from a Developer PowerShell, run `.\build.ps1` and report the output. Fix any XAML
+On Windows, from any PowerShell, run `.\build.ps1` and report the output. Fix any XAML
 compiler errors first, then launch the app and walk through: add two engines, run a short
 tournament with import enabled, then classify openings, compute ratings and export a crosstable.

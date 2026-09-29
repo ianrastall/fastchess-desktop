@@ -15,7 +15,7 @@ Project rules for AI agents and contributors. Read `HANDOFF.md` for the current 
 | Native build | CMake 3.25+ with presets; SQLite from vcpkg (Windows) or the system (Linux) |
 | Solution | `FastchessDesktop.slnx` |
 | Entry points | `src/FastchessDesktop.App/App.xaml.cs` (`OnLaunched`); C ABI in `native/include/fcd/fcd.h` |
-| Build | `.\build.ps1` (Windows, Developer PowerShell) |
+| Build | `.\build.ps1` (Windows, any PowerShell); native only: `.\native\build-native.ps1` |
 | Run | `src\FastchessDesktop.App\bin\x64\<Config>\net10.0-windows10.0.19041.0\win-x64\FastchessDesktop.exe` |
 | Test | `native/out/build/<preset>/.../fcd_tests`, `dotnet test tests\FastchessDesktop.Core.Tests`, `dotnet test tests\FastchessDesktop.ViewModels.Tests` |
 | Lint and format | None configured. Warnings are errors in all C# projects except the App; native builds with `-Wall -Wextra` or `/W4` |
