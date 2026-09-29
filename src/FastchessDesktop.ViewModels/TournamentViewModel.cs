@@ -58,8 +58,30 @@ public sealed partial class TournamentViewModel : ObservableObject
     public partial EngineViewModel? SelectedEngine { get; set; }
 
     // Schedule. Indices map to the enums in FastchessDesktop.Core.Tools; numbers are double for NumberBox.
-    [ObservableProperty] public partial int TournamentTypeIndex { get; set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsGauntlet), nameof(IsSwiss), nameof(IsKnockout), nameof(FormatDescription))]
+    public partial int TournamentTypeIndex { get; set; }
+
     [ObservableProperty] public partial double Seeds { get; set; } = 1;
+    [ObservableProperty] public partial double SwissRounds { get; set; } = 5;
+    [ObservableProperty] public partial double KnockoutTiebreakPairs { get; set; } = 2;
+
+    public bool IsGauntlet => TournamentTypeIndex == (int)TournamentType.Gauntlet;
+    public bool IsSwiss => TournamentTypeIndex == (int)TournamentType.Swiss;
+    public bool IsKnockout => TournamentTypeIndex == (int)TournamentType.Knockout;
+
+    /// <summary>How the selected format is played, shown under the format choice.</summary>
+    public string FormatDescription => (TournamentType)TournamentTypeIndex switch
+    {
+        TournamentType.Gauntlet => "The first N engines (seeds) play every other engine; the others do not meet.",
+        TournamentType.Pyramid => "Engines join in list order; each newcomer plays every engine listed above it. " +
+                                  "Run as one fastchess gauntlet per newcomer.",
+        TournamentType.Knockout => "Single elimination seeded by list order (top seeds get byes). Each match is " +
+                                   "'Rounds' game pairs; ties play tiebreak pairs, then the higher seed advances.",
+        TournamentType.Swiss => "Each round pairs engines with similar scores that have not met; an odd engine out " +
+                                "gets a bye worth a full win. Ranked by score, then Buchholz. Each pairing plays 'Rounds' game pairs.",
+        _ => "Every engine plays every other engine.",
+    };
     [ObservableProperty] public partial double Rounds { get; set; } = 10;
     [ObservableProperty] public partial double GamesPerEncounter { get; set; } = 2;
     [ObservableProperty] public partial double Concurrency { get; set; } = 1;
@@ -154,6 +176,8 @@ public sealed partial class TournamentViewModel : ObservableObject
         Engines = [.. Engines.Select(e => e.ToSettings())],
         Type = (TournamentType)TournamentTypeIndex,
         Seeds = Whole(Seeds),
+        SwissRounds = Whole(SwissRounds),
+        KnockoutTiebreakPairs = Whole(KnockoutTiebreakPairs),
         Rounds = Whole(Rounds),
         GamesPerEncounter = Whole(GamesPerEncounter),
         Concurrency = Whole(Concurrency),
@@ -215,6 +239,8 @@ public sealed partial class TournamentViewModel : ObservableObject
         SelectedEngine = Engines.FirstOrDefault();
         TournamentTypeIndex = (int)s.Type;
         Seeds = s.Seeds;
+        SwissRounds = s.SwissRounds;
+        KnockoutTiebreakPairs = s.KnockoutTiebreakPairs;
         Rounds = s.Rounds;
         GamesPerEncounter = s.GamesPerEncounter;
         Concurrency = s.Concurrency;
@@ -410,7 +436,6 @@ public sealed partial class TournamentViewModel : ObservableObject
         Directory.CreateDirectory(runDir);
         if (string.IsNullOrWhiteSpace(settings.PgnOut)) settings = settings with { PgnOut = Path.Combine(runDir, "games.pgn") };
 
-        var spec = new ProcessSpec(fastchess, FastchessCommandBuilder.Build(settings), runDir);
         FinishedGames.Clear();
         Standings.Clear();
         _scores.Clear();
@@ -418,13 +443,18 @@ public sealed partial class TournamentViewModel : ObservableObject
         GamesTotal = settings.ExpectedGames ?? 1;
         ProgressText = "Starting...";
         IsRunning = true;
-        Log.Add(spec.DisplayCommand, LogKind.Command);
         Log.Add("Working directory: " + runDir);
+        var staged = !TournamentFormats.IsRunByFastchess(settings.Type);
 
         try
         {
-            var result = await ProcessRunner.RunAsync(spec, OnOutputLine, cancellationToken);
-            if (result.Cancelled)
+            var result = await new TournamentRunner().RunAsync(fastchess, runDir, settings, OnOutputLine, OnEvent, cancellationToken);
+            if (result.Cancelled && staged)
+            {
+                Log.Add($"Stopped by user after {result.Duration:hh\\:mm\\:ss}. {settings.Type} tournaments cannot be resumed; " +
+                        "the games played so far are in the PGN file.", LogKind.Error);
+            }
+            else if (result.Cancelled)
             {
                 var state = string.IsNullOrWhiteSpace(settings.StateFile) ? Path.Combine(runDir, "config.json") : settings.StateFile;
                 Log.Add($"Stopped by user after {result.Duration:hh\\:mm\\:ss}. To resume, add " +
@@ -432,7 +462,9 @@ public sealed partial class TournamentViewModel : ObservableObject
             }
             else
             {
-                Log.Add($"fastchess exited with code {result.ExitCode} after {result.Duration:hh\\:mm\\:ss}.",
+                Log.Add(staged && result.ExitCode == 0
+                        ? $"{settings.Type} tournament completed after {result.Duration:hh\\:mm\\:ss}."
+                        : $"fastchess exited with code {result.ExitCode} after {result.Duration:hh\\:mm\\:ss}.",
                     result.ExitCode == 0 ? LogKind.Success : LogKind.Error);
             }
             ProgressText = result.Cancelled ? "Stopped" : result.ExitCode == 0 ? "Finished" : $"Failed (exit code {result.ExitCode})";
@@ -457,11 +489,25 @@ public sealed partial class TournamentViewModel : ObservableObject
         }
     }
 
-    private void OnOutputLine(OutputLine line)
-    {
+    private void OnOutputLine(OutputLine line) =>
         Log.Add(line.Text, line.Stream == OutputStream.StandardError ? LogKind.Error : LogKind.Output);
-        var evt = FastchessOutputParser.Parse(line.Text);
-        if (evt is not null) _dispatcher.Post(() => Apply(evt));
+
+    /// <summary>Runner events arrive on a background thread: log lines now (keeps their order), UI state on the UI thread.</summary>
+    private void OnEvent(FastchessEvent evt)
+    {
+        switch (evt)
+        {
+            case CommandStartedEvent c:
+                Log.Add(c.CommandLine, LogKind.Command);
+                break;
+            case StageStartedEvent s:
+                Log.Add($"Stage {s.Stage}: {s.Description}");
+                break;
+            case TournamentNoteEvent n:
+                Log.Add(n.Message, LogKind.Success);
+                break;
+        }
+        _dispatcher.Post(() => Apply(evt));
     }
 
     /// <summary>Updates progress and live standings from a parsed fastchess line. UI thread only.</summary>
@@ -481,6 +527,9 @@ public sealed partial class TournamentViewModel : ObservableObject
                 Score(f.Black, f.Result switch { "1-0" => -1, "0-1" => 1, "1/2-1/2" => 0, _ => (int?)null });
                 RebuildStandings();
                 ProgressText = $"{GamesFinished:0} of {GamesTotal:0} games finished";
+                break;
+            case StageStartedEvent s:
+                ProgressText = $"Stage {s.Stage}: {s.Description}";
                 break;
             case TournamentFinishedEvent t:
                 ProgressText = t.Message;
@@ -513,7 +562,10 @@ public sealed partial class TournamentViewModel : ObservableObject
             ? (settings.ExpectedGames is { } n ? $"Ready: {n} games scheduled." : "Ready.")
             : string.Join(Environment.NewLine, errors);
         var exe = _settings.EffectiveTools.Fastchess;
-        CommandPreview = CommandLine.Format([exe.Length > 0 ? exe : "fastchess.exe", .. FastchessCommandBuilder.Build(settings)]);
+        var command = CommandLine.Format([exe.Length > 0 ? exe : "fastchess.exe", .. TournamentRunner.FirstStageArguments(settings)]);
+        CommandPreview = TournamentFormats.IsRunByFastchess(settings.Type)
+            ? command
+            : $"{settings.Type} runs fastchess once per stage; the pairings of later stages depend on results. First stage:{Environment.NewLine}{command}";
     }
 
     private void OnAnyPropertyChanged(object? sender, PropertyChangedEventArgs e)

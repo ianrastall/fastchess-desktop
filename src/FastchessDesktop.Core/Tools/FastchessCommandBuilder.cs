@@ -43,6 +43,12 @@ public static class FastchessCommandBuilder
         if (s.GamesPerEncounter is < 1 or > 2) errors.Add("Games per encounter must be 1 or 2.");
         if (s.Type == TournamentType.Gauntlet && (s.Seeds < 1 || s.Seeds >= s.Engines.Count))
             errors.Add("Gauntlet seeds must be at least 1 and fewer than the number of engines.");
+        if (s.Sprt && s.Type is not (TournamentType.RoundRobin or TournamentType.Gauntlet))
+            errors.Add("SPRT is only available for round robin and gauntlet tournaments.");
+        if (s.Type == TournamentType.Swiss && (s.SwissRounds < 1 || s.SwissRounds >= s.Engines.Count))
+            errors.Add("Swiss rounds must be at least 1 and fewer than the number of engines.");
+        if (s.Type == TournamentType.Knockout && s.KnockoutTiebreakPairs < 0)
+            errors.Add("Knockout tiebreak pairs cannot be negative.");
         if (s.Sprt && s.Engines.Count != 2) errors.Add("SPRT requires exactly two engines.");
         if (s.Sprt && s.SprtElo1 <= s.SprtElo0) errors.Add("SPRT elo1 must be greater than elo0.");
         if (s.Sprt && (s.SprtAlpha is <= 0 or >= 1 || s.SprtBeta is <= 0 or >= 1))
@@ -50,8 +56,11 @@ public static class FastchessCommandBuilder
         return errors;
     }
 
+    /// <summary>Arguments for one fastchess run. Only round robin and gauntlet are fastchess formats.</summary>
     public static IReadOnlyList<string> Build(TournamentSettings s)
     {
+        if (s.Type is not (TournamentType.RoundRobin or TournamentType.Gauntlet))
+            throw new ArgumentException($"{s.Type} is run in stages by TournamentRunner, not by a single fastchess command.", nameof(s));
         var a = new List<string>();
 
         foreach (var e in s.Engines)

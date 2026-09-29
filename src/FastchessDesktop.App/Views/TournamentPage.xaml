@@ -97,50 +97,64 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
                         <ComboBox Header="Tournament" HorizontalAlignment="Stretch"
                                   SelectedIndex="{x:Bind ViewModel.TournamentTypeIndex, Mode=TwoWay}">
                             <ComboBoxItem Content="Round robin" />
                             <ComboBoxItem Content="Gauntlet" />
+                            <ComboBoxItem Content="Pyramid" />
+                            <ComboBoxItem Content="Knockout" />
+                            <ComboBoxItem Content="Swiss" />
                         </ComboBox>
                         <NumberBox Grid.Column="1" Header="Gauntlet seeds" Minimum="1"
-                                   Value="{x:Bind ViewModel.Seeds, Mode=TwoWay}" />
-                        <NumberBox Grid.Column="2" Header="Rounds" Minimum="1"
+                                   Value="{x:Bind ViewModel.Seeds, Mode=TwoWay}"
+                                   Visibility="{x:Bind ViewModel.IsGauntlet, Mode=OneWay}" />
+                        <NumberBox Grid.Column="1" Header="Swiss rounds" Minimum="1"
+                                   Value="{x:Bind ViewModel.SwissRounds, Mode=TwoWay}"
+                                   Visibility="{x:Bind ViewModel.IsSwiss, Mode=OneWay}" />
+                        <NumberBox Grid.Column="1" Header="Tiebreak game pairs" Minimum="0"
+                                   Value="{x:Bind ViewModel.KnockoutTiebreakPairs, Mode=TwoWay}"
+                                   Visibility="{x:Bind ViewModel.IsKnockout, Mode=OneWay}" />
+                        <NumberBox Grid.Column="2" Header="Rounds (game pairs per pairing)" Minimum="1"
                                    Value="{x:Bind ViewModel.Rounds, Mode=TwoWay}" />
+                        <TextBlock Grid.Row="1" Grid.ColumnSpan="3" TextWrapping="Wrap"
+                                   Text="{x:Bind ViewModel.FormatDescription, Mode=OneWay}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
-                        <NumberBox Grid.Row="1" Header="Games per encounter" Minimum="1" Maximum="2"
+                        <NumberBox Grid.Row="2" Header="Games per encounter" Minimum="1" Maximum="2"
                                    Value="{x:Bind ViewModel.GamesPerEncounter, Mode=TwoWay}" />
-                        <NumberBox Grid.Row="1" Grid.Column="1" Header="Concurrency (0 = all threads)"
+                        <NumberBox Grid.Row="2" Grid.Column="1" Header="Concurrency (0 = all threads)"
                                    Value="{x:Bind ViewModel.Concurrency, Mode=TwoWay}" />
-                        <CheckBox Grid.Row="1" Grid.Column="2" VerticalAlignment="Bottom" Content="Force concurrency"
+                        <CheckBox Grid.Row="2" Grid.Column="2" VerticalAlignment="Bottom" Content="Force concurrency"
                                   IsChecked="{x:Bind ViewModel.ForceConcurrency, Mode=TwoWay}" />
 
-                        <ComboBox Grid.Row="2" Header="Limit" HorizontalAlignment="Stretch"
+                        <ComboBox Grid.Row="3" Header="Limit" HorizontalAlignment="Stretch"
                                   SelectedIndex="{x:Bind ViewModel.LimitKindIndex, Mode=TwoWay}">
                             <ComboBoxItem Content="Time control (tc)" />
                             <ComboBoxItem Content="Time per move (st)" />
                             <ComboBoxItem Content="Nodes" />
                             <ComboBoxItem Content="Depth" />
                         </ComboBox>
-                        <TextBox Grid.Row="2" Grid.Column="1" Header="[moves/]seconds[+inc]"
+                        <TextBox Grid.Row="3" Grid.Column="1" Header="[moves/]seconds[+inc]"
                                  Text="{x:Bind ViewModel.TimeControl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                  Visibility="{x:Bind ViewModel.IsTimeControlLimit, Mode=OneWay}" />
-                        <NumberBox Grid.Row="2" Grid.Column="1" Header="Seconds per move" Minimum="0" SmallChange="0.1"
+                        <NumberBox Grid.Row="3" Grid.Column="1" Header="Seconds per move" Minimum="0" SmallChange="0.1"
                                    Value="{x:Bind ViewModel.MoveTimeSeconds, Mode=TwoWay}"
                                    Visibility="{x:Bind ViewModel.IsMoveTimeLimit, Mode=OneWay}" />
-                        <NumberBox Grid.Row="2" Grid.Column="1" Header="Nodes per move" Minimum="1"
+                        <NumberBox Grid.Row="3" Grid.Column="1" Header="Nodes per move" Minimum="1"
                                    Value="{x:Bind ViewModel.Nodes, Mode=TwoWay}"
                                    Visibility="{x:Bind ViewModel.IsNodesLimit, Mode=OneWay}" />
-                        <NumberBox Grid.Row="2" Grid.Column="1" Header="Depth" Minimum="1"
+                        <NumberBox Grid.Row="3" Grid.Column="1" Header="Depth" Minimum="1"
                                    Value="{x:Bind ViewModel.Depth, Mode=TwoWay}"
                                    Visibility="{x:Bind ViewModel.IsDepthLimit, Mode=OneWay}" />
-                        <NumberBox Grid.Row="2" Grid.Column="2" Header="Time margin (ms)" Minimum="0"
+                        <NumberBox Grid.Row="3" Grid.Column="2" Header="Time margin (ms)" Minimum="0"
                                    Value="{x:Bind ViewModel.TimeMarginMs, Mode=TwoWay}" />
 
-                        <NumberBox Grid.Row="3" Header="Threads per engine (0 = unset)" Minimum="0"
+                        <NumberBox Grid.Row="4" Header="Threads per engine (0 = unset)" Minimum="0"
                                    Value="{x:Bind ViewModel.Threads, Mode=TwoWay}" />
-                        <NumberBox Grid.Row="3" Grid.Column="1" Header="Hash MB per engine (0 = unset)" Minimum="0"
+                        <NumberBox Grid.Row="4" Grid.Column="1" Header="Hash MB per engine (0 = unset)" Minimum="0"
                                    Value="{x:Bind ViewModel.HashMb, Mode=TwoWay}" />
                     </Grid>
                 </Expander>

@@ -114,6 +114,27 @@ public sealed class TournamentViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Staged_formats_show_their_fields_and_first_stage()
+    {
+        var vm = _shell.Tournament;
+        foreach (var n in new[] { "A", "B", "C", "D" }) vm.Engines.Add(new EngineViewModel { Name = n, Command = n + ".exe" });
+
+        vm.TournamentTypeIndex = (int)TournamentType.Swiss;
+        vm.SwissRounds = 3;
+        vm.Rounds = 1; // 3 Swiss rounds x 2 pairings x 1 game pair x 2 games
+        Assert.True(vm.IsSwiss);
+        Assert.False(vm.IsGauntlet);
+        Assert.StartsWith("Ready: 12 games", vm.ValidationSummary, StringComparison.Ordinal);
+        Assert.StartsWith("Swiss runs fastchess once per stage", vm.CommandPreview, StringComparison.Ordinal);
+        Assert.Equal(3, vm.ToSettings().SwissRounds);
+
+        vm.TournamentTypeIndex = (int)TournamentType.Knockout;
+        Assert.True(vm.IsKnockout);
+        Assert.Contains("name=A", vm.CommandPreview, StringComparison.Ordinal);
+        Assert.Contains("name=D", vm.CommandPreview, StringComparison.Ordinal); // 1 vs 4 is the first match
+    }
+
+    [Fact]
     public void Limit_flags_follow_the_selected_kind()
     {
         var vm = _shell.Tournament;

@@ -1,9 +1,16 @@
 namespace FastchessDesktop.Core.Tools;
 
+/// <summary>
+/// RoundRobin and Gauntlet are run by fastchess itself. Pyramid, Knockout and Swiss are run by
+/// <see cref="TournamentRunner"/> as a series of fastchess runs (one per stage or match).
+/// </summary>
 public enum TournamentType
 {
     RoundRobin,
     Gauntlet,
+    Pyramid,
+    Knockout,
+    Swiss,
 }
 
 /// <summary>Search limit applied to every engine through -each. tc and st are mutually exclusive in fastchess.</summary>
@@ -68,6 +75,12 @@ public sealed record TournamentSettings
 
     public TournamentType Type { get; init; } = TournamentType.RoundRobin;
     public int Seeds { get; init; } = 1;
+
+    /// <summary>Number of Swiss rounds.</summary>
+    public int SwissRounds { get; init; } = 5;
+
+    /// <summary>Extra game pairs played when a knockout match is tied; after that the higher seed advances.</summary>
+    public int KnockoutTiebreakPairs { get; init; } = 2;
     public int Rounds { get; init; } = 10;
     public int GamesPerEncounter { get; init; } = 2;
     public int Concurrency { get; init; } = 1;
@@ -154,9 +167,13 @@ public sealed record TournamentSettings
         {
             var n = Engines.Count;
             if (n < 2 || Rounds <= 0 || GamesPerEncounter <= 0) return null;
-            long pairs = Type == TournamentType.Gauntlet
-                ? (long)Math.Clamp(Seeds, 1, n - 1) * (n - Math.Clamp(Seeds, 1, n - 1))
-                : (long)n * (n - 1) / 2;
+            long pairs = Type switch
+            {
+                TournamentType.Gauntlet => (long)Math.Clamp(Seeds, 1, n - 1) * (n - Math.Clamp(Seeds, 1, n - 1)),
+                TournamentType.Knockout => n - 1, // excluding tiebreaks
+                TournamentType.Swiss => (long)Math.Max(0, SwissRounds) * (n / 2),
+                _ => (long)n * (n - 1) / 2, // round robin and pyramid play the same pairings
+            };
             return pairs * Rounds * GamesPerEncounter;
         }
     }
