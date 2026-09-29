@@ -7,6 +7,10 @@ tournament runner, with a game database for the results.
   and watch the live log, progress, standings and finished games. Formats: round robin and
   gauntlet (run by fastchess itself), plus pyramid, knockout and Swiss (run by the app as a series
   of fastchess runs, see below). Engine names are read from the engine (`id name`) when it is added.
+  Standings and finished games are sortable tables. The standings show Elo with its error margin,
+  nElo, LOS, score, W/D/L, draw ratio, pentanomial counts, Elo change, and engine failures and
+  warnings, computed live with fastchess's own formulas; a two-engine match also shows its
+  head-to-head figures and the live SPRT state.
 - **Database** page: a table of stored games with search, sorting and paging, a tag editor,
   and tools that run on selected games or on everything matching the filter:
   - classify openings from the Lichess chess-openings list (by complete EPD, last matched position)

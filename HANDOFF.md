@@ -7,8 +7,8 @@ State of the repository on 2026-09-29, after the first Windows build and the own
 | Layer | Status |
 | --- | --- |
 | `native/` | Builds with MSVC through `native\build-native.ps1` (confirmed on the owner's machine) and with GCC on Linux. 109 checks pass. |
-| `FastchessDesktop.Core` | Warnings as errors; 61 tests pass on Linux, including the staged tournament runner. |
-| `FastchessDesktop.ViewModels` | Warnings as errors; 17 tests pass on Linux. |
+| `FastchessDesktop.Core` | Warnings as errors; 75 tests pass on Linux, including the staged tournament runner and the statistics checked against a real fastchess report. |
+| `FastchessDesktop.ViewModels` | Warnings as errors; 18 tests pass on Linux. |
 | `FastchessDesktop.App` | Built and installed as MSIX on Windows by the owner (package 1.0.271.8108); a two-engine match ran from the installed app, with run folders in the real `%LOCALAPPDATA%\FastchessDesktop`. |
 
 ## Changes In This Pass
@@ -34,6 +34,26 @@ State of the repository on 2026-09-29, after the first Windows build and the own
   They are shown in red, and a summary line after each run counts them.
 - The post-run import now always reports its outcome in the tournament log, including when no
   database is open (it used to log that only on the Database page).
+
+## Tournament Results Tables
+
+- Standings and finished games are grid tables (header and cells with rules, numbers right
+  aligned) with sortable headers. `SortableTable<TRow>` keeps rows in the chosen order and, on a
+  live update, moves only rows whose position changed; rows are view models that update their own
+  cells. The old code cleared and refilled the standings after every game, and every ListView ran
+  the default entrance animation, which is what made the tables redraw visibly.
+- Statistics are computed live from the "Finished game" lines by `TournamentScoreboard` and
+  `MatchStatistics.cs`, ported from fastchess 1.8.2 (elo_wdl.cpp, elo_pentanomial.cpp, sprt.cpp,
+  scoreboard.hpp). Pairs are games `(n - 1) / games` as fastchess schedules them. Pentanomial
+  statistics are used when fastchess would report them (`-games 2`, its own output format, not the
+  Bayesian SPRT model). A test replays a real 20-game match and matches fastchess's printed Elo,
+  error, nElo, LOS and LLR to the printed precision.
+- Standings columns: rank (by Elo, as fastchess ranks), Elo and 95% margin, nElo and margin, LOS,
+  games, points, score, W/D/L, draw ratio, pentanomial counts, Elo change from the latest result,
+  engine failures and fastchess output warnings per engine. With two engines a head-to-head
+  summary shows the figures of fastchess's report, and the live SPRT state when SPRT is on.
+- The log keeps the last line in view with `ItemsUpdatingScrollMode.KeepLastItemInView` instead of
+  calling `ScrollIntoView` for every batch of lines; that and the entrance animation made it flash.
 
 ## Packaging Design
 
@@ -61,16 +81,17 @@ State of the repository on 2026-09-29, after the first Windows build and the own
 
 In the Linux container:
 
-- `dotnet test` for both test projects (47 and 17 pass).
-- The x:Bind checker (207 paths, 0 problems) and a stub compile of the App C#.
+- `dotnet test` for both test projects (75 and 18 pass).
+- The x:Bind checker, now also checking function bindings (263 paths and 30 function bindings,
+  0 problems; confirmed to catch injected errors), and a stub compile of the App C#.
 - `dotnet restore` of the App project in both package modes; property and item evaluation of the
   App project in both modes (output paths, content links).
 - `package.ps1` parses without errors under PowerShell 7; its version and manifest-rewrite logic
   and its Windows PowerShell helper pattern were exercised under pwsh.
 
-Not verified: anything that needs Windows. That covers the XAML compiler pass after the latest
-XAML changes, the MSIX build (MakePri, MakeAppx, signing), certificate creation and trust,
-`Add-AppxPackage`, and running the packaged app.
+Not verified: anything that needs Windows. That covers the XAML compiler pass for the new tables
+and log panel, and how they look and behave at run time (header and cell alignment, horizontal
+scrolling, that the log no longer flashes).
 
 ## Unresolved Issues
 
@@ -88,7 +109,6 @@ XAML changes, the MSIX build (MakePri, MakeAppx, signing), certificate creation 
 
 ## Next Recommended Action
 
-On Windows, from the repository root: `git pull`, then `.\build.ps1` to confirm the unpackaged
-build, then `.\package.ps1` to build and install the package. Report the output of any failure.
-Then start Fastchess Desktop from the Start menu, pin it, and check that a tournament run writes
-to `%LOCALAPPDATA%\FastchessDesktop\runs`.
+On Windows, from the repository root: `git pull`, then `.\package.ps1 -SkipTests`. Run a short
+two-engine match with SPRT and compare the Standings tab with fastchess's periodic report in the
+log; check sorting, the log with Follow output on, and report any XAML compiler errors.

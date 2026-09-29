@@ -178,6 +178,10 @@
                     SelectionMode="Extended"
                     ItemsSource="{x:Bind ViewModel.Games}"
                     SelectionChanged="OnGamesSelectionChanged">
+                    <!-- No entrance animation when a page of games is reloaded. -->
+                    <ListView.ItemContainerTransitions>
+                        <TransitionCollection />
+                    </ListView.ItemContainerTransitions>
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
                             <Setter Property="MinHeight" Value="28" />

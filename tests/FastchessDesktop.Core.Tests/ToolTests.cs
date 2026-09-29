@@ -162,6 +162,14 @@ public class FastchessOutputParserTests
     public void Classifies_warnings_and_engine_failures(string line, FastchessLineKind expected) =>
         Assert.Equal(expected, FastchessOutputParser.Classify(line));
 
+    [Theory]
+    [InlineData("Warning; Bestmove does not match beginning of last PV - move f7e6 from Berserk 14", "Berserk 14")]
+    [InlineData("Warning; Incomplete mating PV - from Engine X 2.0", "Engine X 2.0")]
+    [InlineData("Info; info depth 14 pv a4a2", null)]
+    [InlineData("Warning; Failed to set CPU affinity for the tournament thread.", null)]
+    public void Finds_the_engine_a_warning_is_about(string line, string? engine) =>
+        Assert.Equal(engine, FastchessOutputParser.WarningEngine(line));
+
     [Fact]
     public void Finished_games_report_engine_failures()
     {

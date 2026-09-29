@@ -9,20 +9,6 @@ using FastchessDesktop.ViewModels.Services;
 
 namespace FastchessDesktop.ViewModels;
 
-public sealed record FinishedGameRow(int Number, string White, string Black, string Result, string Reason)
-{
-    public string NumberText => Number.ToString(System.Globalization.CultureInfo.InvariantCulture);
-    public string Pairing => $"{White} - {Black}";
-}
-
-public sealed record StandingRow(int Rank, string Engine, int Games, double Points, int Wins, int Draws, int Losses)
-{
-    public string RankText => Rank.ToString(System.Globalization.CultureInfo.InvariantCulture);
-    public string Score => $"{Points:0.#} / {Games}";
-    public string Percent => Games > 0 ? $"{100.0 * Points / Games:0.0}%" : "";
-    public string Wdl => $"+{Wins} ={Draws} -{Losses}";
-}
-
 /// <summary>The Tournament page: fastchess configuration, run control and live log.</summary>
 public sealed partial class TournamentViewModel : ObservableObject
 {
@@ -31,7 +17,11 @@ public sealed partial class TournamentViewModel : ObservableObject
     private readonly IAppEnvironment _environment;
     private readonly SettingsViewModel _settings;
     private readonly DatabaseViewModel _database;
-    private readonly Dictionary<string, (int W, int D, int L)> _scores = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, StandingRow> _standingRows = new(StringComparer.Ordinal);
+    private readonly Dictionary<int, DateTime> _gameStarts = [];
+    private TournamentScoreboard _scoreboard = new(2, pentanomial: true);
+    private SprtTest? _sprt;
+    private int _gamesPerEncounter = 2;
 
     public TournamentViewModel(IDialogService dialogs, IUiDispatcher dispatcher, IAppEnvironment environment,
         SettingsViewModel settings, DatabaseViewModel database)
@@ -50,8 +40,27 @@ public sealed partial class TournamentViewModel : ObservableObject
     public LogViewModel Log { get; }
 
     public ObservableCollection<EngineViewModel> Engines { get; } = [];
-    public ObservableCollection<FinishedGameRow> FinishedGames { get; } = [];
-    public ObservableCollection<StandingRow> Standings { get; } = [];
+    public FinishedGamesTable FinishedGames { get; } = new();
+    public StandingsTable Standings { get; } = new();
+
+    // Head-to-head summary, shown when exactly two engines play (the figures fastchess reports).
+    [ObservableProperty] public partial bool HasMatchSummary { get; private set; }
+    [ObservableProperty] public partial string MatchTitle { get; private set; } = "";
+    [ObservableProperty] public partial string MatchElo { get; private set; } = "";
+    [ObservableProperty] public partial string MatchNElo { get; private set; } = "";
+    [ObservableProperty] public partial string MatchLos { get; private set; } = "";
+    [ObservableProperty] public partial string MatchGames { get; private set; } = "";
+    [ObservableProperty] public partial string MatchDrawRatio { get; private set; } = "";
+    [ObservableProperty] public partial string MatchPtnml { get; private set; } = "";
+
+    [ObservableProperty] public partial bool HasSprt { get; private set; }
+    [ObservableProperty] public partial string SprtLlr { get; private set; } = "";
+    [ObservableProperty] public partial string SprtBounds { get; private set; } = "";
+    [ObservableProperty] public partial string SprtHypotheses { get; private set; } = "";
+    [ObservableProperty] public partial string SprtStatus { get; private set; } = "";
+
+    /// <summary>Progress toward the nearer SPRT bound in percent (0 to 100), for a progress bar.</summary>
+    [ObservableProperty] public partial double SprtProgress { get; private set; }
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RemoveEngineCommand), nameof(DuplicateEngineCommand), nameof(DetectEngineNameCommand))]
@@ -436,11 +445,9 @@ public sealed partial class TournamentViewModel : ObservableObject
         Directory.CreateDirectory(runDir);
         if (string.IsNullOrWhiteSpace(settings.PgnOut)) settings = settings with { PgnOut = Path.Combine(runDir, "games.pgn") };
 
-        FinishedGames.Clear();
-        Standings.Clear();
+        ResetResults(settings);
         _outputWarnings = 0;
         _engineFailures = 0;
-        _scores.Clear();
         GamesFinished = 0;
         GamesTotal = settings.ExpectedGames ?? 1;
         ProgressText = "Starting...";
@@ -510,7 +517,15 @@ public sealed partial class TournamentViewModel : ObservableObject
     {
         var kind = FastchessOutputParser.Classify(line.Text);
         if (kind == FastchessLineKind.Warning && line.Text.TrimStart().StartsWith("Warning;", StringComparison.Ordinal))
+        {
             Interlocked.Increment(ref _outputWarnings);
+            if (FastchessOutputParser.WarningEngine(line.Text) is { } engine)
+                _dispatcher.Post(() =>
+                {
+                    _scoreboard.AddWarning(engine);
+                    UpdateStandings();
+                });
+        }
         if (kind == FastchessLineKind.EngineFailure && FastchessOutputParser.Parse(line.Text) is GameFinishedEvent { IsEngineFailure: true })
             Interlocked.Increment(ref _engineFailures);
         Log.Add(line.Text, kind switch
@@ -562,15 +577,16 @@ public sealed partial class TournamentViewModel : ObservableObject
         {
             case GameStartedEvent s:
                 GamesTotal = Math.Max(1, s.Total);
+                _gameStarts[s.Number] = DateTime.Now;
                 ProgressText = $"Playing game {s.Number} of {s.Total}: {s.White} - {s.Black}";
                 break;
             case GameFinishedEvent f:
                 GamesFinished++;
-                FinishedGames.Insert(0, new FinishedGameRow(f.Number, f.White, f.Black, f.Result, f.Reason));
-                while (FinishedGames.Count > 500) FinishedGames.RemoveAt(FinishedGames.Count - 1);
-                Score(f.White, f.Result switch { "1-0" => 1, "0-1" => -1, "1/2-1/2" => 0, _ => (int?)null });
-                Score(f.Black, f.Result switch { "1-0" => -1, "0-1" => 1, "1/2-1/2" => 0, _ => (int?)null });
-                RebuildStandings();
+                _scoreboard.AddGame(f.Number, f.White, f.Black, f.Result, f.Reason);
+                DateTime? started = _gameStarts.Remove(f.Number, out var startTime) ? startTime : null;
+                FinishedGames.Add(new FinishedGameRow(f.Number, (f.Number - 1) / _gamesPerEncounter + 1, f.White, f.Black,
+                    f.Result, f.Reason, f.IsEngineFailure, started, DateTime.Now));
+                UpdateStandings();
                 ProgressText = $"{GamesFinished:0} of {GamesTotal:0} games finished";
                 break;
             case StageStartedEvent s:
@@ -582,20 +598,88 @@ public sealed partial class TournamentViewModel : ObservableObject
         }
     }
 
-    private void Score(string engine, int? outcome)
+    /// <summary>Clears the result tables and sets up statistics the way fastchess computes them for these settings.</summary>
+    private void ResetResults(TournamentSettings settings)
     {
-        if (outcome is null) return;
-        _scores.TryGetValue(engine, out var s);
-        _scores[engine] = outcome switch { 1 => (s.W + 1, s.D, s.L), 0 => (s.W, s.D + 1, s.L), _ => (s.W, s.D, s.L + 1) };
+        _gamesPerEncounter = Math.Max(1, settings.GamesPerEncounter);
+        // fastchess reports pentanomial statistics only with -games 2, its own output format and a non-Bayesian SPRT.
+        var pentanomial = settings.ReportPenta && !settings.CutechessOutput &&
+                          !(settings.Sprt && settings.SprtModel == SprtModel.Bayesian);
+        _scoreboard = new TournamentScoreboard(_gamesPerEncounter, pentanomial);
+        foreach (var e in settings.Engines) _scoreboard.AddEngine(FastchessCommandBuilder.EngineName(e));
+        _sprt = settings.Sprt && settings.Engines.Count == 2
+            ? new SprtTest(settings.SprtAlpha, settings.SprtBeta, settings.SprtElo0, settings.SprtElo1, settings.SprtModel)
+            : null;
+        _gameStarts.Clear();
+        _standingRows.Clear();
+        Standings.Clear();
+        FinishedGames.Clear();
+        UpdateStandings();
     }
 
-    private void RebuildStandings()
+    /// <summary>Recomputes every engine's row in place, ranks by Elo as fastchess does, and restores the sort.</summary>
+    private void UpdateStandings()
     {
-        Standings.Clear();
+        foreach (var engine in _scoreboard.Engines)
+        {
+            if (!_standingRows.TryGetValue(engine, out var row))
+            {
+                row = new StandingRow(engine);
+                _standingRows[engine] = row;
+                Standings.Rows.Add(row);
+            }
+            row.Update(_scoreboard.StatsOf(engine), _scoreboard.EloOf(engine), _scoreboard.Pentanomial,
+                _scoreboard.Failures(engine), _scoreboard.Warnings(engine));
+        }
         var rank = 0;
-        foreach (var (name, s) in _scores.OrderByDescending(kv => kv.Value.W + 0.5 * kv.Value.D)
-                     .ThenBy(kv => kv.Value.W + kv.Value.D + kv.Value.L).ThenBy(kv => kv.Key, StringComparer.Ordinal))
-            Standings.Add(new StandingRow(++rank, name, s.W + s.D + s.L, s.W + 0.5 * s.D, s.W, s.D, s.L));
+        foreach (var row in _standingRows.Values
+                     .OrderByDescending(r => double.IsNaN(r.Elo) ? double.NegativeInfinity : r.Elo)
+                     .ThenByDescending(r => r.Points).ThenBy(r => r.Games).ThenBy(r => r.Engine, StringComparer.Ordinal))
+            row.SetRank(++rank);
+        Standings.Refresh();
+        UpdateMatchSummary();
+    }
+
+    private void UpdateMatchSummary()
+    {
+        var engines = _scoreboard.Engines;
+        HasMatchSummary = engines.Count == 2;
+        HasSprt = HasMatchSummary && _sprt is not null;
+        if (!HasMatchSummary) return;
+
+        var (first, second) = (engines[0], engines[1]);
+        var s = _scoreboard.HeadToHead(first, second);
+        var elo = _scoreboard.Estimate(s);
+        var penta = _scoreboard.Pentanomial;
+        MatchTitle = $"{first} vs {second}";
+        MatchElo = elo is null ? "-" : $"{TableFormat.Signed(elo.Elo, "0.00")} +/- {TableFormat.Number(elo.Error, "0.00")}";
+        MatchNElo = elo is null ? "-" : $"{TableFormat.Signed(elo.NElo, "0.00")} +/- {TableFormat.Number(elo.NEloError, "0.00")}";
+        MatchLos = elo is null ? "-" : TableFormat.Percent(elo.Los);
+        MatchGames = $"{s.Games} games: +{s.Wins} ={s.Draws} -{s.Losses}, {TableFormat.Number(s.Points, "0.0")} points" +
+                     (s.Games > 0 ? $" ({TableFormat.Percent(100.0 * s.Points / s.Games)})" : "");
+        // As in fastchess: with pentanomial reporting the draw ratio counts drawn pairs (WL or DD).
+        MatchDrawRatio = penta
+            ? (s.Pairs > 0 ? TableFormat.Percent(100.0 * (s.WL + s.DD) / s.Pairs) : "-")
+            : (s.Games > 0 ? TableFormat.Percent(100.0 * s.Draws / s.Games) : "-");
+        MatchPtnml = penta
+            ? $"[{s.LL}, {s.LD}, {s.WL + s.DD}, {s.WD}, {s.WW}], pairs ratio " +
+              $"{TableFormat.Number((double)(s.WW + s.WD) / (s.LD + s.LL), "0.00")}, WL/DD {TableFormat.Number((double)s.WL / s.DD, "0.00")}"
+            : "Not reported (needs 2 games per encounter)";
+
+        if (_sprt is null) return;
+        var llr = _sprt.Llr(s, penta);
+        var fraction = _sprt.Fraction(llr);
+        SprtLlr = $"{TableFormat.Number(llr, "0.00")} ({TableFormat.Number(fraction * 100, "0.0")} %)";
+        SprtBounds = $"({TableFormat.Number(_sprt.LowerBound, "0.00")}, {TableFormat.Number(_sprt.UpperBound, "0.00")})";
+        SprtHypotheses = $"[{TableFormat.Number(_sprt.Elo0, "0.00")}, {TableFormat.Number(_sprt.Elo1, "0.00")}] " +
+                         _sprt.Model.ToString().ToLowerInvariant();
+        SprtStatus = _sprt.Outcome(llr) switch
+        {
+            SprtOutcome.AcceptH1 => $"H1 accepted: {first} gains at least elo1",
+            SprtOutcome.AcceptH0 => $"H0 accepted: {first} does not gain elo1",
+            _ => "Running",
+        };
+        SprtProgress = double.IsFinite(fraction) ? Math.Clamp(Math.Abs(fraction) * 100, 0, 100) : 0;
     }
 
     [RelayCommand]

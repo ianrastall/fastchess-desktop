@@ -11,7 +11,8 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <StackPanel Orientation="Horizontal" Spacing="8">
-            <CheckBox x:Name="AutoScroll" Content="Follow output" IsChecked="True" MinWidth="0" />
+            <CheckBox x:Name="AutoScroll" Content="Follow output" IsChecked="True" MinWidth="0"
+                      Checked="OnFollowChanged" Unchecked="OnFollowChanged" />
             <Button Content="Copy" Click="OnCopyClick" />
             <Button Content="Clear" Click="OnClearClick" />
         </StackPanel>
@@ -23,7 +24,21 @@
             Background="{ThemeResource ControlFillColorInputActiveBrush}"
             BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
             BorderThickness="1"
-            CornerRadius="4">
+            CornerRadius="4"
+            Loaded="OnLinesLoaded">
+            <!--
+                Following output: the panel keeps the last line in view as lines arrive, instead of a
+                ScrollIntoView per batch, and new lines appear without the default entrance animation.
+                Both caused the log to flash while a tournament runs.
+            -->
+            <ListView.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <ItemsStackPanel ItemsUpdatingScrollMode="KeepLastItemInView" />
+                </ItemsPanelTemplate>
+            </ListView.ItemsPanel>
+            <ListView.ItemContainerTransitions>
+                <TransitionCollection />
+            </ListView.ItemContainerTransitions>
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="MinHeight" Value="0" />

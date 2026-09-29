@@ -21,19 +21,25 @@ public sealed partial class LogPanel : UserControl
 
     private static void OnLogChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        var panel = (LogPanel)d;
-        if (e.OldValue is LogViewModel oldLog) oldLog.LinesAppended -= panel.OnLinesAppended;
-        if (e.NewValue is LogViewModel newLog)
-        {
-            newLog.LinesAppended += panel.OnLinesAppended;
-            panel.Lines.ItemsSource = newLog.Lines;
-        }
+        if (e.NewValue is LogViewModel newLog) ((LogPanel)d).Lines.ItemsSource = newLog.Lines;
     }
 
-    private void OnLinesAppended(object? sender, EventArgs e)
+    private void OnLinesLoaded(object sender, RoutedEventArgs e) => ApplyFollowMode();
+
+    private void OnFollowChanged(object sender, RoutedEventArgs e)
     {
-        if (AutoScroll.IsChecked == true && Log is { Lines.Count: > 0 } log)
-            Lines.ScrollIntoView(log.Lines[^1]);
+        if (Lines is null) return; // raised while the XAML is still loading
+        ApplyFollowMode();
+        // Resuming: jump to the newest line once; the panel keeps it in view from then on.
+        if (AutoScroll.IsChecked == true && Log is { Lines.Count: > 0 } log) Lines.ScrollIntoView(log.Lines[^1]);
+    }
+
+    private void ApplyFollowMode()
+    {
+        if (Lines.ItemsPanelRoot is ItemsStackPanel panel)
+            panel.ItemsUpdatingScrollMode = AutoScroll.IsChecked == true
+                ? ItemsUpdatingScrollMode.KeepLastItemInView
+                : ItemsUpdatingScrollMode.KeepItemsInView;
     }
 
     private void OnCopyClick(object sender, RoutedEventArgs e)

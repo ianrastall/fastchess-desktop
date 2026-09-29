@@ -6,6 +6,7 @@
     xmlns:vm="using:FastchessDesktop.ViewModels"
     xmlns:views="using:FastchessDesktop.App.Views"
     xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
+    xmlns:services="using:FastchessDesktop.App.Services"
     NavigationCacheMode="Required">
 
     <Grid Padding="16,8,16,16">
@@ -368,63 +369,348 @@
                     <views:LogPanel Log="{x:Bind ViewModel.Log}" Margin="0,8,0,0" />
                 </PivotItem>
                 <PivotItem Header="Standings">
-                    <ListView ItemsSource="{x:Bind ViewModel.Standings}" SelectionMode="None" Margin="0,8,0,0">
-                        <ListView.Header>
-                            <Grid Padding="12,0" ColumnSpacing="8">
+                    <Grid RowSpacing="8" Margin="0,8,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Head-to-head figures and SPRT, as fastchess reports them, when exactly two engines play. -->
+                        <Grid Visibility="{x:Bind ViewModel.HasMatchSummary, Mode=OneWay}" ColumnSpacing="12" RowSpacing="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.ColumnSpan="4" Text="{x:Bind ViewModel.MatchTitle, Mode=OneWay}" FontWeight="SemiBold" />
+                            <TextBlock Grid.Row="1" Style="{StaticResource SummaryLabelStyle}" Text="Elo" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind ViewModel.MatchElo, Mode=OneWay}" />
+                            <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource SummaryLabelStyle}" Text="nElo" />
+                            <TextBlock Grid.Row="1" Grid.Column="3" Text="{x:Bind ViewModel.MatchNElo, Mode=OneWay}" />
+                            <TextBlock Grid.Row="2" Style="{StaticResource SummaryLabelStyle}" Text="LOS" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{x:Bind ViewModel.MatchLos, Mode=OneWay}" />
+                            <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource SummaryLabelStyle}" Text="Draw ratio" />
+                            <TextBlock Grid.Row="2" Grid.Column="3" Text="{x:Bind ViewModel.MatchDrawRatio, Mode=OneWay}" />
+                            <TextBlock Grid.Row="3" Style="{StaticResource SummaryLabelStyle}" Text="Games" />
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{x:Bind ViewModel.MatchGames, Mode=OneWay}" TextWrapping="Wrap" />
+                            <TextBlock Grid.Row="3" Grid.Column="2" Style="{StaticResource SummaryLabelStyle}" Text="Ptnml(0-2)" />
+                            <TextBlock Grid.Row="3" Grid.Column="3" Text="{x:Bind ViewModel.MatchPtnml, Mode=OneWay}" TextWrapping="Wrap" />
+                            <Grid Grid.Row="4" Grid.ColumnSpan="4" ColumnSpacing="12" Margin="0,6,0,0"
+                                  Visibility="{x:Bind ViewModel.HasSprt, Mode=OneWay}">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="110" />
-                                    <ColumnDefinition Width="80" />
-                                    <ColumnDefinition Width="140" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="#" FontWeight="SemiBold" />
-                                <TextBlock Grid.Column="1" Text="Engine" FontWeight="SemiBold" />
-                                <TextBlock Grid.Column="2" Text="Score" FontWeight="SemiBold" />
-                                <TextBlock Grid.Column="3" Text="%" FontWeight="SemiBold" />
-                                <TextBlock Grid.Column="4" Text="W / D / L" FontWeight="SemiBold" />
+                                <TextBlock Style="{StaticResource SummaryLabelStyle}" Text="SPRT" />
+                                <TextBlock Grid.Column="1" Text="{x:Bind ViewModel.SprtHypotheses, Mode=OneWay}" />
+                                <TextBlock Grid.Column="2" Text="{x:Bind ViewModel.SprtLlr, Mode=OneWay}" FontWeight="SemiBold"
+                                           ToolTipService.ToolTip="Log-likelihood ratio, and progress toward the nearer bound" />
+                                <TextBlock Grid.Column="3" Text="{x:Bind ViewModel.SprtBounds, Mode=OneWay}"
+                                           ToolTipService.ToolTip="Bounds: H0 is accepted at the lower, H1 at the upper" />
+                                <StackPanel Grid.Column="4" Spacing="2" VerticalAlignment="Center">
+                                    <ProgressBar Value="{x:Bind ViewModel.SprtProgress, Mode=OneWay}" Maximum="100" />
+                                    <TextBlock Text="{x:Bind ViewModel.SprtStatus, Mode=OneWay}" Style="{StaticResource SummaryLabelStyle}" />
+                                </StackPanel>
                             </Grid>
-                        </ListView.Header>
-                        <ListView.ItemTemplate>
-                            <DataTemplate x:DataType="vm:StandingRow">
-                                <Grid ColumnSpacing="8">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="40" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="110" />
-                                        <ColumnDefinition Width="80" />
-                                        <ColumnDefinition Width="140" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="{x:Bind RankText}" />
-                                    <TextBlock Grid.Column="1" Text="{x:Bind Engine}" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="2" Text="{x:Bind Score}" />
-                                    <TextBlock Grid.Column="3" Text="{x:Bind Percent}" />
-                                    <TextBlock Grid.Column="4" Text="{x:Bind Wdl}" />
+                        </Grid>
+
+                        <!-- Column widths must match the item template below. Click a header to sort; click again to reverse. -->
+                        <ScrollViewer Grid.Row="1" HorizontalScrollMode="Auto" HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
+                            <Border BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1,1,0,0"
+                                    HorizontalAlignment="Left" VerticalAlignment="Stretch">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="48" />
+                                            <ColumnDefinition Width="180" />
+                                            <ColumnDefinition Width="72" />
+                                            <ColumnDefinition Width="64" />
+                                            <ColumnDefinition Width="72" />
+                                            <ColumnDefinition Width="64" />
+                                            <ColumnDefinition Width="72" />
+                                            <ColumnDefinition Width="64" />
+                                            <ColumnDefinition Width="64" />
+                                            <ColumnDefinition Width="72" />
+                                            <ColumnDefinition Width="52" />
+                                            <ColumnDefinition Width="52" />
+                                            <ColumnDefinition Width="52" />
+                                            <ColumnDefinition Width="72" />
+                                            <ColumnDefinition Width="128" />
+                                            <ColumnDefinition Width="68" />
+                                            <ColumnDefinition Width="52" />
+                                            <ColumnDefinition Width="56" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('#', 'Rank', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="Rank"
+                                                    ToolTipService.ToolTip="Rank by Elo, as fastchess ranks" />
+                                        </Border>
+                                        <Border Grid.Column="1" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('Engine', 'Engine', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="Engine" />
+                                        </Border>
+                                        <Border Grid.Column="2" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('Elo', 'Elo', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="Elo"
+                                                    ToolTipService.ToolTip="Elo difference against the field, from game pairs when fastchess reports pentanomial statistics" />
+                                        </Border>
+                                        <Border Grid.Column="3" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('+/-', 'Error', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="Error"
+                                                    ToolTipService.ToolTip="95% confidence margin of the Elo" />
+                                        </Border>
+                                        <Border Grid.Column="4" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('nElo', 'NElo', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="NElo"
+                                                    ToolTipService.ToolTip="Normalized Elo: the score difference scaled by its spread" />
+                                        </Border>
+                                        <Border Grid.Column="5" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('+/-', 'NEloError', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="NEloError"
+                                                    ToolTipService.ToolTip="95% confidence margin of the normalized Elo" />
+                                        </Border>
+                                        <Border Grid.Column="6" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('LOS', 'Los', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="Los"
+                                                    ToolTipService.ToolTip="Likelihood of superiority: the chance the engine is stronger than the field" />
+                                        </Border>
+                                        <Border Grid.Column="7" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('Games', 'Games', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="Games" />
+                                        </Border>
+                                        <Border Grid.Column="8" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('Points', 'Points', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="Points" />
+                                        </Border>
+                                        <Border Grid.Column="9" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('Score', 'Score', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="Score"
+                                                    ToolTipService.ToolTip="Points as a percentage of games played" />
+                                        </Border>
+                                        <Border Grid.Column="10" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('W', 'Wins', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="Wins" />
+                                        </Border>
+                                        <Border Grid.Column="11" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('D', 'Draws', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="Draws" />
+                                        </Border>
+                                        <Border Grid.Column="12" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('L', 'Losses', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="Losses" />
+                                        </Border>
+                                        <Border Grid.Column="13" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('Draw', 'DrawRatio', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="DrawRatio"
+                                                    ToolTipService.ToolTip="Drawn games as a percentage of games played" />
+                                        </Border>
+                                        <Border Grid.Column="14" Style="{StaticResource TableHeaderCellStyle}">
+                                            <TextBlock Style="{StaticResource TableHeaderTextStyle}" Text="Ptnml(0-2)"
+                                                       ToolTipService.ToolTip="Game pairs scoring 0, 0.5, 1, 1.5 and 2 points (LL, LD, WL+DD, WD, WW)" />
+                                        </Border>
+                                        <Border Grid.Column="15" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('Change', 'Change', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="Change"
+                                                    ToolTipService.ToolTip="How much the engine's latest result moved its Elo" />
+                                        </Border>
+                                        <Border Grid.Column="16" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('Fail', 'Failures', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="Failures"
+                                                    ToolTipService.ToolTip="Games lost by time forfeit, crash, stalled connection or illegal move" />
+                                        </Border>
+                                        <Border Grid.Column="17" Style="{StaticResource TableHeaderCellStyle}">
+                                            <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                    Content="{x:Bind vm:TableHeader.Label('Warn', 'Warnings', ViewModel.Standings.SortKey, ViewModel.Standings.SortDescending), Mode=OneWay}"
+                                                    Command="{x:Bind ViewModel.Standings.SortCommand}" CommandParameter="Warnings"
+                                                    ToolTipService.ToolTip="fastchess warnings about the engine's search output (they do not affect results)" />
+                                        </Border>
+                                    </Grid>
+                                    <ListView Grid.Row="1" ItemsSource="{x:Bind ViewModel.Standings.Rows}" SelectionMode="None"
+                                              ItemContainerStyle="{StaticResource TableRowStyle}">
+                                        <ListView.ItemContainerTransitions>
+                                            <TransitionCollection />
+                                        </ListView.ItemContainerTransitions>
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:StandingRow">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="48" />
+                                                        <ColumnDefinition Width="180" />
+                                                        <ColumnDefinition Width="72" />
+                                                        <ColumnDefinition Width="64" />
+                                                        <ColumnDefinition Width="72" />
+                                                        <ColumnDefinition Width="64" />
+                                                        <ColumnDefinition Width="72" />
+                                                        <ColumnDefinition Width="64" />
+                                                        <ColumnDefinition Width="64" />
+                                                        <ColumnDefinition Width="72" />
+                                                        <ColumnDefinition Width="52" />
+                                                        <ColumnDefinition Width="52" />
+                                                        <ColumnDefinition Width="52" />
+                                                        <ColumnDefinition Width="72" />
+                                                        <ColumnDefinition Width="128" />
+                                                        <ColumnDefinition Width="68" />
+                                                        <ColumnDefinition Width="52" />
+                                                        <ColumnDefinition Width="56" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind RankText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="1" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableTextStyle}" Text="{x:Bind Engine}" FontWeight="SemiBold" /></Border>
+                                                    <Border Grid.Column="2" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind EloText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="3" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind ErrorText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="4" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind NEloText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="5" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind NEloErrorText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="6" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind LosText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="7" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind GamesText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="8" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind PointsText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="9" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind ScoreText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="10" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind WinsText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="11" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind DrawsText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="12" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind LossesText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="13" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind DrawRatioText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="14" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind PtnmlText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="15" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind ChangeText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="16" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind FailuresText, Mode=OneWay}" /></Border>
+                                                    <Border Grid.Column="17" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind WarningsText, Mode=OneWay}" /></Border>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
                                 </Grid>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
+                            </Border>
+                        </ScrollViewer>
+                    </Grid>
                 </PivotItem>
                 <PivotItem Header="Finished games">
-                    <ListView ItemsSource="{x:Bind ViewModel.FinishedGames}" SelectionMode="None" Margin="0,8,0,0">
-                        <ListView.ItemTemplate>
-                            <DataTemplate x:DataType="vm:FinishedGameRow">
-                                <Grid ColumnSpacing="8">
+                    <!-- Column widths must match the item template below. Click a header to sort; click again to reverse. -->
+                    <ScrollViewer Margin="0,8,0,0" HorizontalScrollMode="Auto" HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
+                        <Border BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1,1,0,0"
+                                HorizontalAlignment="Left" VerticalAlignment="Stretch">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="60" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="70" />
-                                        <ColumnDefinition Width="2*" />
+                                        <ColumnDefinition Width="56" />
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="76" />
+                                        <ColumnDefinition Width="280" />
+                                        <ColumnDefinition Width="80" />
+                                        <ColumnDefinition Width="76" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="{x:Bind NumberText}" />
-                                    <TextBlock Grid.Column="1" Text="{x:Bind Pairing}" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Column="2" Text="{x:Bind Result}" />
-                                    <TextBlock Grid.Column="3" Text="{x:Bind Reason}" TextTrimming="CharacterEllipsis"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <Border Style="{StaticResource TableHeaderCellStyle}">
+                                        <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                Content="{x:Bind vm:TableHeader.Label('#', 'Number', ViewModel.FinishedGames.SortKey, ViewModel.FinishedGames.SortDescending), Mode=OneWay}"
+                                                Command="{x:Bind ViewModel.FinishedGames.SortCommand}" CommandParameter="Number" />
+                                    </Border>
+                                    <Border Grid.Column="1" Style="{StaticResource TableHeaderCellStyle}">
+                                        <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                Content="{x:Bind vm:TableHeader.Label('Pair', 'Pair', ViewModel.FinishedGames.SortKey, ViewModel.FinishedGames.SortDescending), Mode=OneWay}"
+                                                Command="{x:Bind ViewModel.FinishedGames.SortCommand}" CommandParameter="Pair"
+                                                ToolTipService.ToolTip="Game pair: the games played on one opening with colors swapped" />
+                                    </Border>
+                                    <Border Grid.Column="2" Style="{StaticResource TableHeaderCellStyle}">
+                                        <Button Style="{StaticResource TableSortButtonStyle}"
+                                                Content="{x:Bind vm:TableHeader.Label('White', 'White', ViewModel.FinishedGames.SortKey, ViewModel.FinishedGames.SortDescending), Mode=OneWay}"
+                                                Command="{x:Bind ViewModel.FinishedGames.SortCommand}" CommandParameter="White" />
+                                    </Border>
+                                    <Border Grid.Column="3" Style="{StaticResource TableHeaderCellStyle}">
+                                        <Button Style="{StaticResource TableSortButtonStyle}"
+                                                Content="{x:Bind vm:TableHeader.Label('Black', 'Black', ViewModel.FinishedGames.SortKey, ViewModel.FinishedGames.SortDescending), Mode=OneWay}"
+                                                Command="{x:Bind ViewModel.FinishedGames.SortCommand}" CommandParameter="Black" />
+                                    </Border>
+                                    <Border Grid.Column="4" Style="{StaticResource TableHeaderCellStyle}">
+                                        <Button Style="{StaticResource TableSortButtonStyle}"
+                                                Content="{x:Bind vm:TableHeader.Label('Result', 'Result', ViewModel.FinishedGames.SortKey, ViewModel.FinishedGames.SortDescending), Mode=OneWay}"
+                                                Command="{x:Bind ViewModel.FinishedGames.SortCommand}" CommandParameter="Result" />
+                                    </Border>
+                                    <Border Grid.Column="5" Style="{StaticResource TableHeaderCellStyle}">
+                                        <Button Style="{StaticResource TableSortButtonStyle}"
+                                                Content="{x:Bind vm:TableHeader.Label('Termination', 'Reason', ViewModel.FinishedGames.SortKey, ViewModel.FinishedGames.SortDescending), Mode=OneWay}"
+                                                Command="{x:Bind ViewModel.FinishedGames.SortCommand}" CommandParameter="Reason"
+                                                ToolTipService.ToolTip="How the game ended; engine failures are red" />
+                                    </Border>
+                                    <Border Grid.Column="6" Style="{StaticResource TableHeaderCellStyle}">
+                                        <Button Style="{StaticResource TableSortButtonStyle}"
+                                                Content="{x:Bind vm:TableHeader.Label('Started', 'Started', ViewModel.FinishedGames.SortKey, ViewModel.FinishedGames.SortDescending), Mode=OneWay}"
+                                                Command="{x:Bind ViewModel.FinishedGames.SortCommand}" CommandParameter="Started" />
+                                    </Border>
+                                    <Border Grid.Column="7" Style="{StaticResource TableHeaderCellStyle}">
+                                        <Button Style="{StaticResource TableSortButtonRightStyle}"
+                                                Content="{x:Bind vm:TableHeader.Label('Time', 'Duration', ViewModel.FinishedGames.SortKey, ViewModel.FinishedGames.SortDescending), Mode=OneWay}"
+                                                Command="{x:Bind ViewModel.FinishedGames.SortCommand}" CommandParameter="Duration"
+                                                ToolTipService.ToolTip="Game duration (minutes:seconds)" />
+                                    </Border>
                                 </Grid>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
+                                <ListView Grid.Row="1" ItemsSource="{x:Bind ViewModel.FinishedGames.Rows}" SelectionMode="None"
+                                          ItemContainerStyle="{StaticResource TableRowStyle}">
+                                    <ListView.ItemContainerTransitions>
+                                        <TransitionCollection />
+                                    </ListView.ItemContainerTransitions>
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:FinishedGameRow">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="60" />
+                                                    <ColumnDefinition Width="56" />
+                                                    <ColumnDefinition Width="170" />
+                                                    <ColumnDefinition Width="170" />
+                                                    <ColumnDefinition Width="76" />
+                                                    <ColumnDefinition Width="280" />
+                                                    <ColumnDefinition Width="80" />
+                                                    <ColumnDefinition Width="76" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind NumberText}" /></Border>
+                                                <Border Grid.Column="1" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind PairText}" /></Border>
+                                                <Border Grid.Column="2" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableTextStyle}" Text="{x:Bind White}" /></Border>
+                                                <Border Grid.Column="3" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableTextStyle}" Text="{x:Bind Black}" /></Border>
+                                                <Border Grid.Column="4" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableTextStyle}" Text="{x:Bind Result}" /></Border>
+                                                <Border Grid.Column="5" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableTextStyle}" Text="{x:Bind Reason}" Foreground="{x:Bind services:TableColors.Termination(IsEngineFailure)}" /></Border>
+                                                <Border Grid.Column="6" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableTextStyle}" Text="{x:Bind StartedText}" /></Border>
+                                                <Border Grid.Column="7" Style="{StaticResource TableCellStyle}"><TextBlock Style="{StaticResource TableNumberStyle}" Text="{x:Bind DurationText}" /></Border>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </Grid>
+                        </Border>
+                    </ScrollViewer>
                 </PivotItem>
             </Pivot>
         </Grid>

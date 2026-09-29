@@ -74,6 +74,18 @@ public static partial class FastchessOutputParser
     [GeneratedRegex(@"^\s*(Timeouts|Crashed): (\d+)\s*$")]
     private static partial Regex TrackerRegex();
 
+    /// <summary>
+    /// The engine a "Warning;" line is about. fastchess ends these with "from &lt;engine name&gt;"
+    /// (match.cpp); returns null for other lines.
+    /// </summary>
+    public static string? WarningEngine(string line)
+    {
+        var trimmed = line.Trim();
+        if (!trimmed.StartsWith("Warning;", StringComparison.Ordinal)) return null;
+        var at = trimmed.LastIndexOf(" from ", StringComparison.Ordinal);
+        return at < 0 ? null : trimmed[(at + " from ".Length)..];
+    }
+
     public static bool IsEngineFailureReason(string reason) =>
         FailureReasons.Any(r => reason.Contains(r, StringComparison.Ordinal));
 
