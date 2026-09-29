@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define FCD_ABI_VERSION 3
+#define FCD_ABI_VERSION 4
 
 typedef enum fcd_status {
     FCD_OK = 0,
@@ -54,6 +54,7 @@ typedef enum fcd_status {
 
 typedef struct fcd_db fcd_db;
 typedef struct fcd_openings fcd_openings;
+typedef struct fcd_ratings fcd_ratings;
 
 typedef int (*fcd_progress_fn)(void* user, int64_t done, int64_t total);
 
@@ -169,6 +170,23 @@ FCD_API fcd_status fcd_openings_write_eco_pgn(const fcd_openings* book, const ch
  * matched complete EPD. Writes {"eco","name","opening","variation","ply"} or
  * the literal null when nothing matches. */
 FCD_API fcd_status fcd_openings_classify_uci(const fcd_openings* book, const char* uci_moves, char** out_json);
+
+/* ---- Engine rating list (Ordo CSV, such as the UCERL list) --------------- */
+
+/* Loads an Ordo CSV rating list: a header with PLAYER and RATING columns (and
+ * optionally PLAYED, the number of games), then one row per player. */
+FCD_API fcd_status fcd_ratings_load_csv(const char* csv_path, fcd_ratings** out_list);
+FCD_API void fcd_ratings_free(fcd_ratings* list);
+FCD_API int64_t fcd_ratings_count(const fcd_ratings* list);
+
+/* Looks up an engine by the name it reports. Names are compared case-insensitively
+ * without parenthesized parts, build tags (x64, avx2, bmi2 ...) and trailing ".0"
+ * version components. When the name is not listed but is a newer version of a
+ * listed engine ("Stockfish 19" with "Stockfish 18" listed), the rating is
+ * estimated as the newest older version's rating plus 10.
+ * Writes {"player","rating","games","estimated","baseRating"} or the literal
+ * null when neither the engine nor an older version of it is listed. */
+FCD_API fcd_status fcd_ratings_lookup(const fcd_ratings* list, const char* engine_name, char** out_json);
 
 /* ---- Command lines (Windows CommandLineToArgvW rules) ------------------- */
 

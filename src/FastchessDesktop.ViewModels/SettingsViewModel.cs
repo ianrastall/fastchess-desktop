@@ -16,6 +16,7 @@ public sealed partial class SettingsViewModel(IDialogService dialogs, IAppEnviro
     [ObservableProperty] public partial string OrdoprepPath { get; set; } = "";
     [ObservableProperty] public partial string PgnExtractPath { get; set; } = "";
     [ObservableProperty] public partial string OpeningsTsvPath { get; set; } = "";
+    [ObservableProperty] public partial string RatingListPath { get; set; } = "";
 
     [ObservableProperty] public partial double AnalysisDepth { get; set; } = 16;
     [ObservableProperty] public partial double AnalysisMoveTimeMs { get; set; }
@@ -65,6 +66,7 @@ public sealed partial class SettingsViewModel(IDialogService dialogs, IAppEnviro
         Ordoprep = OrdoprepPath.Trim(),
         PgnExtract = PgnExtractPath.Trim(),
         OpeningsTsv = OpeningsTsvPath.Trim(),
+        RatingList = RatingListPath.Trim(),
     };
 
     public AnalysisSettings ToAnalysisSettings() => new()
@@ -100,6 +102,7 @@ public sealed partial class SettingsViewModel(IDialogService dialogs, IAppEnviro
         OrdoprepPath = tools.Ordoprep;
         PgnExtractPath = tools.PgnExtract;
         OpeningsTsvPath = tools.OpeningsTsv;
+        RatingListPath = tools.RatingList;
         AnalysisDepth = analysis.Depth;
         AnalysisMoveTimeMs = analysis.MoveTimeMs;
         AnalysisThreads = analysis.Threads;
@@ -120,7 +123,12 @@ public sealed partial class SettingsViewModel(IDialogService dialogs, IAppEnviro
     [RelayCommand]
     private async Task BrowseAsync(string which)
     {
-        var filters = which == nameof(OpeningsTsvPath) ? FileFilters.Tsv : FileFilters.Executable;
+        var filters = which switch
+        {
+            nameof(OpeningsTsvPath) => FileFilters.Tsv,
+            nameof(RatingListPath) => FileFilters.Csv,
+            _ => FileFilters.Executable,
+        };
         var path = await dialogs.PickOpenFileAsync(filters);
         if (path is null) return;
         switch (which)
@@ -131,6 +139,7 @@ public sealed partial class SettingsViewModel(IDialogService dialogs, IAppEnviro
             case nameof(OrdoprepPath): OrdoprepPath = path; break;
             case nameof(PgnExtractPath): PgnExtractPath = path; break;
             case nameof(OpeningsTsvPath): OpeningsTsvPath = path; break;
+            case nameof(RatingListPath): RatingListPath = path; break;
             default: throw new ArgumentOutOfRangeException(nameof(which), which, "unknown setting");
         }
     }

@@ -49,5 +49,9 @@ public sealed class ShellViewModel : ObservableObject, IDisposable
 
     public void SaveSettings() => _store.Save(CollectSettings());
 
-    public void Dispose() => Database.Dispose();
+    public void Dispose()
+    {
+        Tournament.Dispose();
+        Database.Dispose();
+    }
 }

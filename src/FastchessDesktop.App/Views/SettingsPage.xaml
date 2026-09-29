@@ -25,6 +25,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <TextBlock Text="fastchess" Style="{StaticResource FieldLabelStyle}" />
@@ -50,6 +51,11 @@
                 <TextBlock Grid.Row="5" Text="Lichess openings TSV" Style="{StaticResource FieldLabelStyle}" />
                 <TextBox Grid.Row="5" Grid.Column="1" Text="{x:Bind ViewModel.OpeningsTsvPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="data\lichess-openings.tsv" />
                 <Button Grid.Row="5" Grid.Column="2" Content="..." Command="{x:Bind ViewModel.BrowseCommand}" CommandParameter="OpeningsTsvPath" />
+
+                <TextBlock Grid.Row="6" Text="Engine rating list" Style="{StaticResource FieldLabelStyle}"
+                           ToolTipService.ToolTip="An Ordo CSV file (PLAYER and RATING columns). Rates, colors and sorts the engines on the Tournament page." />
+                <TextBox Grid.Row="6" Grid.Column="1" Text="{x:Bind ViewModel.RatingListPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="data\ucerl-ratings.csv" />
+                <Button Grid.Row="6" Grid.Column="2" Content="..." Command="{x:Bind ViewModel.BrowseCommand}" CommandParameter="RatingListPath" />
             </Grid>
 
             <TextBlock Text="Analysis (Stockfish)" Style="{StaticResource SectionHeaderStyle}" />

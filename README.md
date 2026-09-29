@@ -7,6 +7,8 @@ tournament runner, with a game database for the results.
   and watch the live log, progress, standings and finished games. Formats: round robin and
   gauntlet (run by fastchess itself), plus pyramid, knockout and Swiss (run by the app as a series
   of fastchess runs, see below). Engine names are read from the engine (`id name`) when it is added.
+  Engines are rated from an engine rating list (see below), shown with a color per rating tier,
+  placed by rating when added, and can be sorted strongest first or dragged into any order.
   Standings and finished games are sortable tables. The standings show Elo with its error margin,
   nElo, LOS, score, W/D/L, draw ratio, pentanomial counts, Elo change, and engine failures and
   warnings, computed live with fastchess's own formulas; a two-engine match also shows its
@@ -40,6 +42,27 @@ append to the same PGN, and game numbers and progress continue across runs.
 
 SPRT is only available for round robin and gauntlet. A stopped pyramid, knockout or Swiss
 tournament cannot be resumed.
+
+## Engine ratings
+
+The engine list on the Tournament page is rated from an Ordo CSV rating list (a header with
+`PLAYER` and `RATING` columns, optionally `PLAYED`). The default is the bundled UCERL list
+(`assets/ucerl/ucerl-ratings.csv`, copied to `data\ucerl-ratings.csv`); another list can be set in
+Settings under Engine rating list.
+
+- An engine is looked up by the name fastchess uses for it. Names are compared case-insensitively,
+  ignoring parenthesized parts, build tags (x64, avx2, bmi2, popcnt ...), a leading `v` on the
+  version and trailing `.0` components, so "Obsidian 16.0 (x64 avx2)" matches "Obsidian 16". When
+  several list entries match, the one with the most games is used.
+- A version that is not listed, but is newer than a listed version of the same engine, is estimated
+  at that version's rating plus 10 and marked with `~` (for example Stockfish 19 from Stockfish 18).
+  Older versions with fewer than 100 games are skipped for this while a better-sampled one exists.
+- Colors mark tiers of 200 Elo: 3700 and above, 3500, 3300, 3100, 2900, lower, and gray for engines
+  that are not rated. The selected engine's details say which list entry the rating came from and
+  how many games it rests on ("few games" below 100).
+- A newly added engine is placed before the first engine rated lower. Sort by rating orders the whole
+  list, strongest first, with unrated engines last. The list order is also the seeding for gauntlet,
+  pyramid and knockout tournaments, so drag engines afterwards if you want another seeding.
 
 ## Architecture
 
@@ -116,6 +139,7 @@ The build copies the bundled tools next to the executable:
 | pgn-extract | `pgn-extract/pgn-extract.exe` | `tools\pgn-extract\pgn-extract.exe` |
 | Stockfish | `stockfish/**/*.exe` (not in the repository yet) | `tools\stockfish\` |
 | Lichess openings | `lichess-openings/lichess-openings.tsv` | `data\lichess-openings.tsv` |
+| UCERL rating list | `ucerl/ucerl-ratings.csv` | `data\ucerl-ratings.csv` |
 
 Stockfish is not part of the repository. Put the executable under `assets\stockfish\` before
 building, or set its path in Settings.
@@ -170,8 +194,13 @@ The C# test projects copy the native library that the matching native build prod
 
 ## Known limitations
 
-- Stopping a tournament kills fastchess. Its state file is saved periodically (`-autosaveinterval`),
-  and the log prints the `-config` argument that resumes the run.
+- Stopping a tournament kills fastchess and its engines. Its state file is saved periodically
+  (`-autosaveinterval`), and the log prints the `-config` argument that resumes the run. The settings
+  unlock as soon as fastchess has stopped; the games played so far are then imported. If a process
+  outside fastchess's process tree keeps its output open, the app stops reading it after a few
+  seconds and says so in the log.
+- Engines that the rating list does not know (development builds, renamed binaries) are unrated
+  and sorted last; there is no manual rating yet.
 - Analysis skips Chess960 games.
 - Evaluations are stored per game but are not yet written into exported PGN comments.
 - The MSIX package is signed with a self-signed certificate, so it installs only on machines that

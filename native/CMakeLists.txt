@@ -35,6 +35,7 @@ add_library(fcd_core SHARED
     src/json.cpp
     src/openings.cpp
     src/process.cpp
+    src/ratings.cpp
     src/stats.cpp
     src/tools.cpp
     src/tournament.cpp
@@ -72,6 +73,7 @@ if(FCD_BUILD_TESTS)
     target_compile_definitions(fcd_tests PRIVATE
         FCD_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data"
         FCD_TEST_OPENINGS_TSV="${CMAKE_CURRENT_SOURCE_DIR}/../assets/lichess-openings/lichess-openings.tsv"
+        FCD_TEST_UCERL_CSV="${CMAKE_CURRENT_SOURCE_DIR}/../assets/ucerl/ucerl-ratings.csv"
         FCD_FAKE_FASTCHESS="$<TARGET_FILE:fake_fastchess>"
         FCD_FAKE_UCI="$<TARGET_FILE:fake_uci_engine>")
     if(MSVC)

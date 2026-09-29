@@ -235,6 +235,36 @@ public sealed class TournamentViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Stop_ends_the_run_and_unlocks_the_page()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var vm = _shell.Tournament;
+        _shell.Settings.FastchessPath = FastchessDesktop.Tests.FakePrograms.Fastchess;
+        vm.Engines.Add(new EngineViewModel { Name = "A", Command = "hang" });
+        vm.Engines.Add(new EngineViewModel { Name = "B", Command = "1" });
+        var playing = new TaskCompletionSource();
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(vm.ProgressText) && vm.ProgressText.StartsWith("Playing", StringComparison.Ordinal))
+                playing.TrySetResult();
+        };
+
+        var run = vm.StartCommand.ExecuteAsync(null);
+        await playing.Task.WaitAsync(TimeSpan.FromSeconds(20), ct);
+        Assert.True(vm.IsRunning);
+        vm.StartCancelCommand.Execute(null);
+        Assert.Equal("Stopping...", vm.ProgressText);
+
+        await run.WaitAsync(TimeSpan.FromSeconds(20), ct);
+        Assert.False(vm.IsRunning);
+        Assert.True(vm.IsIdle);
+        Assert.True(vm.StartCommand.CanExecute(null));
+        Assert.Equal("Stopped", vm.ProgressText);
+        Assert.Contains(vm.Log.Lines, l => l.Text.StartsWith("Stop requested", StringComparison.Ordinal));
+        Assert.Contains(vm.Log.Lines, l => l.Text.StartsWith("Stopped by user", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Added_engines_take_the_name_they_report()
     {
         var path = FastchessDesktop.Tests.FakePrograms.UciEngine;
@@ -254,6 +284,51 @@ public sealed class TournamentViewModelTests : IDisposable
         vm.Engines[1].Name = "My build";
         await vm.DetectEngineNameCommand.ExecuteAsync(null);
         Assert.Equal("FakeEngine 1.0 (2)", vm.Engines[1].Name);
+    }
+
+    [Fact]
+    public async Task Engines_are_rated_placed_and_sorted_by_the_rating_list()
+    {
+        var csv = Path.Combine(_env.DataDirectory, "ratings.csv");
+        Directory.CreateDirectory(_env.DataDirectory);
+        File.WriteAllText(csv, """
+            "#","PLAYER","RATING","ERROR","POINTS","PLAYED","(%)"
+            1,"Strong 2",3750.0,"-",100.00,200,50.00
+            2,"FakeEngine 0.9",3400.0,"-",100.00,200,50.00
+            3,"Weak 1",2800.0,"-",5.00,10,50.00
+            """);
+        var vm = _shell.Tournament;
+        vm.Engines.Add(new EngineViewModel { Name = "Weak 1", Command = "weak.exe" });
+        Assert.Null(vm.Engines[0].Rating);
+        Assert.StartsWith("No engine rating list", vm.Engines[0].RatingDetail, StringComparison.Ordinal);
+
+        _shell.Settings.RatingListPath = csv;  // rates the engines already listed
+        Assert.Equal("2800", vm.Engines[0].RatingText);
+        Assert.Equal(6, vm.Engines[0].Tier);
+        Assert.Contains("few games", vm.Engines[0].RatingDetail, StringComparison.Ordinal);
+
+        vm.Engines.Add(new EngineViewModel { Name = "Unlisted", Command = "u.exe" });
+        vm.Engines.Add(new EngineViewModel { Name = "Strong 2", Command = "s.exe" });
+        Assert.Equal(0, vm.Engines[1].Tier);
+        Assert.StartsWith("Not in the rating list (ratings.csv)", vm.Engines[1].RatingDetail, StringComparison.Ordinal);
+        Assert.Equal(1, vm.Engines[2].Tier);
+
+        // Renaming looks the engine up again.
+        vm.Engines[1].Name = "Strong 3";
+        Assert.Equal("~3760", vm.Engines[1].RatingText);
+        Assert.StartsWith("Rating 3760.0 estimated: Strong 2 is rated 3750.0", vm.Engines[1].RatingDetail, StringComparison.Ordinal);
+
+        vm.SelectedEngine = vm.Engines[0];
+        vm.SortEnginesByRatingCommand.Execute(null);
+        Assert.Equal(["Strong 3", "Strong 2", "Weak 1"], vm.Engines.Select(e => e.Name));
+        Assert.Equal("Weak 1", vm.SelectedEngine?.Name);
+
+        // An added engine goes to its place by rating (FakeEngine 1.0 is estimated from 0.9).
+        _dialogs.Paths.Enqueue(FastchessDesktop.Tests.FakePrograms.UciEngine);
+        await vm.AddEngineCommand.ExecuteAsync(null);
+        Assert.Equal(["Strong 3", "Strong 2", "FakeEngine 1.0", "Weak 1"], vm.Engines.Select(e => e.Name));
+        Assert.Equal("~3410", vm.Engines[2].RatingText);
+        Assert.Same(vm.Engines[2], vm.SelectedEngine);
     }
 
     [Fact]

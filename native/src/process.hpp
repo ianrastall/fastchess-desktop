@@ -51,8 +51,12 @@ class Child {
     // True once both output pipes have reached end of file and every line was delivered.
     virtual bool output_finished() const = 0;
     // Waits for the output to finish; after timeout_ms stops the remaining process tree (for example
-    // engines left behind by a crashed fastchess, which keep the pipes open) and waits again.
+    // engines left behind by a crashed fastchess, which keep the pipes open) and waits again. If a
+    // process outside the tree still holds the pipes after that, reading stops (see output_abandoned),
+    // so this always returns.
     virtual void finish_output(int timeout_ms) = 0;
+    // True when finish_output stopped reading output that was still open.
+    virtual bool output_abandoned() const = 0;
 };
 
 struct RunResult {
@@ -61,7 +65,8 @@ struct RunResult {
     long long duration_ms = 0;
 };
 
-// Runs a program to completion. Requesting cancel stops the whole process tree.
+// Runs a program to completion. Requesting cancel stops the whole process tree. If the output
+// stays open after the tree was stopped, a line saying so is passed to on_line on Stderr.
 RunResult run(const Options& options, const LineHandler& on_line, const Cancel* cancel);
 
 // Splits a byte stream into lines at "\n", "\r\n" or a lone "\r", like .NET's ReadLine.

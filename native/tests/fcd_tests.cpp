@@ -201,6 +201,57 @@ void test_ratings(const std::filesystem::path& dir) {
     fcd_db_close(db);
 }
 
+std::string lookup(const fcd_ratings* list, const char* name) {
+    char* json = nullptr;
+    CHECK_OK(fcd_ratings_lookup(list, name, &json));
+    return take(json);
+}
+
+// Engine rating lists (Ordo CSV): exact matches, name normalization and newer-version estimates.
+void test_rating_list() {
+    fcd_ratings* list = nullptr;
+    CHECK(fcd_ratings_load_csv(FCD_TEST_DATA_DIR "/no-such-list.csv", &list) == FCD_ERR_NOT_FOUND);
+    CHECK(fcd_ratings_load_csv(FCD_TEST_DATA_DIR "/sample.pgn", &list) == FCD_ERR_PARSE);
+    CHECK(contains(fcd_last_error(), "PLAYER and RATING"));
+
+    CHECK_OK(fcd_ratings_load_csv(FCD_TEST_DATA_DIR "/rating-list.csv", &list));
+    CHECK(fcd_ratings_count(list) == 11);  // the row without a number is skipped
+
+    CHECK(lookup(list, "Stockfish 18") ==
+          R"({"player":"Stockfish 18","rating":3823.3,"games":461772,"estimated":false,"baseRating":3823.3})");
+    // Case, build tags and parenthesized parts do not matter.
+    CHECK(contains(lookup(list, "stockfish 18 (x64 avx2) bmi2"), R"("rating":3823.3,)"));
+    // A newer version is estimated 10 above the newest older version with the same suffix.
+    CHECK(lookup(list, "Stockfish 19") ==
+          R"({"player":"Stockfish 18","rating":3833.3,"games":461772,"estimated":true,"baseRating":3823.3})");
+    CHECK(contains(lookup(list, "Stockfish 17.5"), R"("player":"Stockfish 17.1","rating":3813,)"));
+    CHECK(contains(lookup(list, "Stockfish 17.1 SE"), R"("rating":3775.2,"games":11,"estimated":false)"));
+    CHECK(contains(lookup(list, "Stockfish 18 SE"), R"("player":"Stockfish 17.1 SE","rating":3785.2,)"));
+    CHECK(lookup(list, "Stockfish 16") == "null");  // older than everything listed
+    // "0.10" and "0.10.0" are the same version; the entry with more games wins.
+    CHECK(contains(lookup(list, "Reckless 0.10"), R"("player":"Reckless 0.10.0","rating":3734.1,"games":724,)"));
+    CHECK(contains(lookup(list, "Reckless v0.10.0"), R"("rating":3734.1,)"));
+    // Estimates skip older versions with few games while a well-sampled one is listed.
+    CHECK(contains(lookup(list, "Reckless 0.11"), R"("player":"Reckless 0.10.0","rating":3744.1,)"));
+    CHECK(contains(lookup(list, "Obsidian 17"), R"("player":"Obsidian 16.0","rating":3727.3,)"));
+    CHECK(contains(lookup(list, "Obsidian 16.5"), R"("player":"Obsidian 16.0","rating":3727.3,)"));
+    CHECK(contains(lookup(list, "Raid 6.8 AdL"), R"("rating":3794.1,)"));
+    CHECK(contains(lookup(list, "Obsidian 16v"), R"("rating":3733.1,)"));
+    CHECK(contains(lookup(list, R"(Berserk "Quoted", Edition 13)"), R"("player":"Berserk \"Quoted\", Edition 13")"));
+    CHECK(contains(lookup(list, "ShashChess 32"), R"("rating":3600.5,)"));  // a bare number is a version, not a build tag
+    CHECK(lookup(list, "Unknown Engine 1.0") == "null");
+    CHECK(lookup(list, "  ") == "null");
+    fcd_ratings_free(list);
+
+    // The bundled UCERL list: Stockfish 19 is not in it yet and comes out on top as an estimate.
+    CHECK_OK(fcd_ratings_load_csv(FCD_TEST_UCERL_CSV, &list));
+    CHECK(fcd_ratings_count(list) == 7427);
+    CHECK(lookup(list, "Stockfish 19") ==
+          R"({"player":"Stockfish 18","rating":3833.3,"games":461772,"estimated":true,"baseRating":3823.3})");
+    CHECK(contains(lookup(list, "Reckless 0.9.0"), R"("rating":3773.4,"games":175931,"estimated":false)"));
+    fcd_ratings_free(list);
+}
+
 void test_exports(const std::filesystem::path& dir) {
     fcd_db* db = nullptr;
     CHECK_OK(fcd_db_open((dir / "games.fcdb").string().c_str(), &db));
@@ -277,6 +328,7 @@ int main() {
     test_editing(dir);
     test_openings_and_fill(dir);
     test_ratings(dir);
+    test_rating_list();
     test_exports(dir);
     run_tools_tests();
     run_process_tests();

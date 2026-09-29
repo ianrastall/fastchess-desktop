@@ -24,30 +24,55 @@
                           IsEnabled="{x:Bind ViewModel.IsIdle, Mode=OneWay}">
                     <Grid ColumnSpacing="12" RowSpacing="8">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="200" />
+                            <ColumnDefinition Width="240" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
                         <StackPanel Orientation="Horizontal" Spacing="4" Grid.ColumnSpan="2">
                             <Button Content="Add engine..." Command="{x:Bind ViewModel.AddEngineCommand}" />
                             <Button Content="Duplicate" Command="{x:Bind ViewModel.DuplicateEngineCommand}" />
                             <Button Content="Remove" Command="{x:Bind ViewModel.RemoveEngineCommand}" />
+                            <Button Content="Sort by rating" Command="{x:Bind ViewModel.SortEnginesByRatingCommand}"
+                                    ToolTipService.ToolTip="Strongest first, unrated engines last. The list order is also the seeding for gauntlet, pyramid and knockout; drag engines to change it." />
                         </StackPanel>
 
+                        <!-- Added engines are placed by rating; drag to reorder. The bar and the rating show the tier. -->
                         <ListView Grid.Row="1" MinHeight="160" MaxHeight="320"
                                   ItemsSource="{x:Bind ViewModel.Engines}"
                                   SelectedItem="{x:Bind ViewModel.SelectedEngine, Mode=TwoWay}"
+                                  CanReorderItems="True" AllowDrop="True"
                                   BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                </Style>
+                            </ListView.ItemContainerStyle>
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="vm:EngineViewModel">
-                                    <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                    <Grid ColumnSpacing="8" ToolTipService.ToolTip="{x:Bind RatingDetail, Mode=OneWay}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="4" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Background="{x:Bind services:TierColors.For(Tier), Mode=OneWay}" CornerRadius="2" Margin="0,8" />
+                                        <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                   Text="{x:Bind DisplayName, Mode=OneWay}" />
+                                        <TextBlock Grid.Column="2" VerticalAlignment="Center"
+                                                   Text="{x:Bind RatingText, Mode=OneWay}"
+                                                   Foreground="{x:Bind services:TierColors.For(Tier), Mode=OneWay}" />
+                                    </Grid>
                                 </DataTemplate>
                             </ListView.ItemTemplate>
                         </ListView>
+
+                        <TextBlock Grid.Row="2" FontSize="12" TextWrapping="Wrap"
+                                   ToolTipService.ToolTip="Rating tiers of 200 Elo from the engine rating list (Settings). ~ marks an estimate: a newer version of a listed engine, rated 10 above it."><Run Text="3700+  " Foreground="{StaticResource RatingTier1Brush}" /><Run Text="3500  " Foreground="{StaticResource RatingTier2Brush}" /><Run Text="3300  " Foreground="{StaticResource RatingTier3Brush}" /><Run Text="3100  " Foreground="{StaticResource RatingTier4Brush}" /><Run Text="2900  " Foreground="{StaticResource RatingTier5Brush}" /><Run Text="lower  " Foreground="{StaticResource RatingTier6Brush}" /><Run Text="unrated" Foreground="{StaticResource RatingTier0Brush}" /></TextBlock>
 
                         <StackPanel Grid.Row="1" Grid.Column="1" Spacing="8">
                             <Grid ColumnSpacing="4">
@@ -62,6 +87,8 @@
                                         Command="{x:Bind ViewModel.DetectEngineNameCommand}" />
                             </Grid>
                             <TextBlock Text="{x:Bind ViewModel.SelectedEngine.Status, Mode=OneWay}" TextWrapping="Wrap"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.SelectedEngine.RatingDetail, Mode=OneWay}" TextWrapping="Wrap"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <Grid ColumnSpacing="4">
                                 <Grid.ColumnDefinitions>

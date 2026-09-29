@@ -11,7 +11,7 @@ internal static unsafe partial class NativeMethods
     private const string Library = "fcd_core";
 
     /// <summary>Must equal FCD_ABI_VERSION in fcd.h.</summary>
-    public const int ExpectedAbiVersion = 3;
+    public const int ExpectedAbiVersion = 4;
 
     [StructLayout(LayoutKind.Sequential)]
     public struct FcdQuery
@@ -104,6 +104,18 @@ internal static unsafe partial class NativeMethods
     [LibraryImport(Library, EntryPoint = "fcd_openings_classify_uci", StringMarshalling = StringMarshalling.Utf8)]
     public static partial FcdStatus OpeningsClassifyUci(OpeningBookHandle book, string uciMoves, out nint json);
 
+    [LibraryImport(Library, EntryPoint = "fcd_ratings_load_csv", StringMarshalling = StringMarshalling.Utf8)]
+    public static partial FcdStatus RatingsLoadCsv(string csvPath, out nint list);
+
+    [LibraryImport(Library, EntryPoint = "fcd_ratings_free")]
+    public static partial void RatingsFree(nint list);
+
+    [LibraryImport(Library, EntryPoint = "fcd_ratings_count")]
+    public static partial long RatingsCount(RatingListHandle list);
+
+    [LibraryImport(Library, EntryPoint = "fcd_ratings_lookup", StringMarshalling = StringMarshalling.Utf8)]
+    public static partial FcdStatus RatingsLookup(RatingListHandle list, string engineName, out nint json);
+
     /// <summary>Copies and frees a library-owned UTF-8 string.</summary>
     public static string TakeString(nint p)
     {
@@ -171,6 +183,21 @@ internal sealed class OpeningBookHandle : SafeHandle
     protected override bool ReleaseHandle()
     {
         NativeMethods.OpeningsFree(handle);
+        return true;
+    }
+}
+
+internal sealed class RatingListHandle : SafeHandle
+{
+    public RatingListHandle() : base(0, ownsHandle: true) { }
+
+    public RatingListHandle(nint handle) : this() => SetHandle(handle);
+
+    public override bool IsInvalid => handle == 0;
+
+    protected override bool ReleaseHandle()
+    {
+        NativeMethods.RatingsFree(handle);
         return true;
     }
 }

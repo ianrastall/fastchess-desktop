@@ -1,28 +1,72 @@
 # Handoff
 
-State of the repository on 2026-09-29, after moving the internals into the C++ core and routing
-engine warnings out of the tournament log.
+State of the repository on 2026-09-29, after the Stop fix and engine ratings from the UCERL list.
 
 ## Current State
 
 | Layer | Status |
 | --- | --- |
-| `native/` | 371 checks pass on Linux (GCC). The non-database parts (262 checks) also pass as a MinGW build under Wine. The owner built the core with MSVC 14.51 and ran all native and C# tests on Windows (before the engine-warning change). |
-| `FastchessDesktop.Core` | A thin wrapper over the ABI. Warnings as errors; 78 tests pass on Linux against the native implementation, none skipped. |
-| `FastchessDesktop.ViewModels` | Warnings as errors; 21 tests pass on Linux. |
-| `FastchessDesktop.App` | Built and installed as MSIX on Windows by the owner (package 1.0.271.30217, after the migration); a 500-game SPRT match ran from the installed app. |
+| `native/` | 428 checks pass on Linux (GCC). FCD_ABI_VERSION is now 4 (rating list functions added). Not built with MSVC or MinGW since this pass. |
+| `FastchessDesktop.Core` | A thin wrapper over the ABI. Warnings as errors; 79 tests pass on Linux. |
+| `FastchessDesktop.ViewModels` | Warnings as errors; 23 tests pass on Linux. |
+| `FastchessDesktop.App` | Changed in this pass (engine list template, legend, Sort button, rating list setting, tier brushes, `TierColors.cs`). Not compiled: the XAML compiler only runs on Windows. The last Windows build was package 1.0.271.30217, before this pass. |
 
 ## Changes In This Pass
 
-- Tournament page: resizable panels (CommunityToolkit GridSplitter), padding on the settings panel,
-  no inline spin buttons on NumberBoxes (their popup could only be closed with Tab).
-- Engine names: a provisional name from the file name, then the name the engine reports (`id name`)
-  over UCI. A Detect button repeats the query.
-- Tournament formats: pyramid, knockout and Swiss, run by `TournamentRunner` as a series of
-  fastchess runs (fastchess 1.8 only schedules round robin and gauntlet). Pairing rules live in
-  `TournamentFormats`. See README for the rules.
-- Packaging: `package.ps1` builds a signed MSIX and installs or upgrades it for the current user,
-  which gives a Start menu entry and a taskbar pin that follows upgrades.
+### Stopping a tournament
+
+The owner reported that after Stop the interface became unusable. It could not be reproduced on
+Linux (the native cancel returned promptly), so the fixes address every way the Tournament page
+could stay locked after a stop, and make each stage visible in the log:
+
+- The settings stayed disabled until the post-run PGN import had finished, because `IsRunning` was
+  cleared in a `finally` after `await ImportLastGamesAsync()`. The import can be slow (a large
+  database) or wait on the database lock while the Database page runs another job, and it showed
+  nothing on the Tournament page meanwhile. `IsRunning` is now cleared as soon as fastchess has
+  exited; the import follows, and the log says when the database is busy with another job. The
+  Start button stays disabled until the import ends (the command is still running).
+- Stop gave no feedback until the native run returned. The cancellation now logs
+  "Stop requested: stopping fastchess and its engines..." and shows "Stopping..." at once.
+- Native (process.cpp): after stopping the process tree, the reader threads were joined without a
+  limit. A process outside the job object (or, on POSIX, the process group) that still held the
+  output pipes would keep the run, and so the page, waiting for as long as that process lived.
+  `finish_output` now waits 3 s after the kill, then stops reading: POSIX readers poll and check a
+  flag; Windows readers are cancelled with `CancelSynchronousIo` on a duplicated thread handle. The
+  run then logs "the output of ... was still open ...". After a cancel the first wait is 1 s
+  instead of 5 s, since the tree was already stopped.
+- The PGN import and the fill jobs created their `Progress<T>` inside `Task.Run`, so busy-text
+  updates ran on a thread-pool thread and reached the (cached) Database page's x:Bind bindings off
+  the UI thread. The reporters are now created on the calling thread.
+- An import error from the post-run import (raised when it runs beside another database job) is
+  logged instead of escaping the command.
+
+Tests: `test_process_escaped_child` (native) uses a new fake_fastchess mode `cmd=escape` that starts
+a child outside the tree (setsid on POSIX; a job breakaway attempt on Windows, which our job does
+not allow, so there it stays inside and only the time limits are checked). Against the old
+process.cpp this test fails (the run lasts as long as the escaped child, 15 s). The view-model test
+`Stop_ends_the_run_and_unlocks_the_page` runs the fake fastchess, presses Stop and checks the
+"Stopping..." state, the log lines and that the page and Start unlock.
+
+### Engine ratings (UCERL list)
+
+- The owner supplied `assets/ucerl/ucerl-ratings.csv`: the UCERL (Universal Chess Engines Rating
+  List), an Ordo CSV of 7427 engines built from the merged, deduplicated games of the public rating
+  lists. It is bundled as `data\ucerl-ratings.csv` (a Content item, so the MSIX includes it). It was
+  force-added like the other assets (`/assets/` is in `.gitignore`).
+- native `ratings.cpp` (ABI: `fcd_ratings_load_csv`, `_free`, `_count`, `_lookup`): Ordo CSV parsing
+  (quoted fields, BOM, CRLF, columns found by header name), name normalization and lookup. See the
+  README section "Engine ratings" for the rules. Stockfish 19, not yet in the list, comes out as
+  3833.3 (Stockfish 18 plus 10), at the top, as the owner asked.
+- C#: `RatingList` and `EngineRating` in Core; `ToolPaths.RatingList` with the bundled default and a
+  Settings field; `EngineViewModel.Rating`, `RatingText` ("3823", "~3833"), `RatingDetail`, `Tier`
+  (200-Elo bands, `TierOf`); `TournamentViewModel` looks engines up when added or renamed and when
+  the list path changes, places a newly added engine by rating, and has `SortEnginesByRatingCommand`.
+- App: engine list items show a tier color bar, the name and the rating in the tier color, with the
+  details as a tooltip and under the Status line; a legend under the list; a Sort by rating button;
+  drag reordering (`CanReorderItems`). Tier brushes are `RatingTier0Brush` to `RatingTier6Brush` in
+  App.xaml.
+- List order matters: it is the seeding for gauntlet, pyramid and knockout. Automatic placement
+  only happens when an engine is added; loaded settings keep their saved order.
 
 ## Tournament Log
 
@@ -131,30 +175,38 @@ the C# tests and the thin wrapper layer.
 
 ## Verification Performed
 
-In the Linux container:
+In the Linux container (this pass):
 
 - `native/`: `cmake --preset linux && cmake --build --preset linux && ./native/out/build/linux/fcd_tests`
-  (371 checks: database, tools, statistics, processes, UCI, analysis, tournaments, engine warnings).
-- Windows code paths: the native sources without the database, the fake programs and a test driver
-  built with MinGW (x86_64-w64-mingw32-g++-posix, static) and run under Wine 9: 262 checks pass,
-  including cancellation and the cleanup of an orphaned child that holds the output pipes open.
-  SQLite could not be fetched in the container, so the database is not part of that build.
-- `dotnet test` for both test projects (78 and 21 pass).
-- The x:Bind checker, now also checking function bindings (263 paths and 30 function bindings,
-  0 problems; confirmed to catch injected errors), and a stub compile of the App C#.
-- `dotnet restore` of the App project in both package modes; property and item evaluation of the
-  App project in both modes (output paths, content links).
-- `package.ps1` parses without errors under PowerShell 7; its version and manifest-rewrite logic
-  and its Windows PowerShell helper pattern were exercised under pwsh.
+  from `native/`: 428 checks, 0 failures, no compiler warnings.
+- The new escaped-child test was run against the previous process.cpp: 4 failures (the run lasted
+  as long as the escaped process). With the change it passes.
+- `dotnet test` for both test projects: 79 and 23 pass. The Stop test fails against the previous
+  view model (no "Stopping..." state) and passes now.
+- The .NET SDK download host is blocked by this environment's network policy. The SDK came from
+  Ubuntu's `dotnet-sdk-10.0` package: `apt-get download` of it and its dependencies, unpacked with
+  `dpkg -x` into the session scratchpad (nothing installed system-wide), with `DOTNET_ROOT`, `PATH`
+  and `NUGET_PACKAGES` pointing there.
+- Engine-name matching was checked by hand against the full UCERL list for about 25 real engine
+  names (Stockfish, Reckless, PlentyChess, Obsidian, Berserk, Caissa, Torch, Viridithas, Stormphrax,
+  Integral, Lc0, Dragon, Ethereal, Koivisto, Alexandria, Clover, Patricia).
+- The changed XAML files are well-formed XML, and every new x:Bind path was checked by hand against
+  the view-model members. The App project build on Linux stops at the XAML compiler (a Windows
+  program), as expected.
 
-On Windows (by the owner, before the engine-warning change): `.\build.ps1` built the native core
-with MSVC 14.51 and passed 355 native checks, 77 Core and 20 ViewModel tests; `.\package.ps1`
-built and installed the MSIX, and a match ran from the installed app.
-
-Not verified: the engine-warning change with MSVC and in the app.
+Not verified: the Windows code in process.cpp (`CancelSynchronousIo` path) with MSVC or MinGW; the
+XAML changes (compile and look); the rating list in the packaged app; the Stop fix against the
+owner's real tournament.
 
 ## Unresolved Issues
 
+- The root cause of the reported Stop problem was not reproduced; see "Stopping a tournament" for
+  what was fixed. If the page still locks up after Stop, the log now shows which stage it reached.
+- Engines not in the rating list (development builds, renamed binaries) are unrated; there is no
+  manual rating override yet. It would need a per-engine field kept outside `EngineSettings` or
+  ignored by the native settings parser.
+- A PGN cut off inside a game header imports as an extra empty game (seen while testing truncated
+  PGNs; fastchess writes whole games, so this needs a kill during a write).
 - Stockfish is not in `assets/`. Place it under `assets\stockfish\` or set its path in Settings.
 - Stopping fastchess kills the process tree instead of sending Ctrl+C.
 - Staged tournaments (pyramid, knockout, Swiss) cannot be resumed after a stop.
@@ -169,7 +221,8 @@ Not verified: the engine-warning change with MSVC and in the app.
 
 ## Next Recommended Action
 
-On Windows, from the repository root: `git pull; .\build.ps1`, then `.\package.ps1 -SkipTests`.
-Run a match with an engine that triggers the PV warning (Peacekeeper 3.01) and check that the log
-shows one explanation line per engine, the Warnings column counts every occurrence, and
-`engine-warnings.log` in the run folder holds the full blocks.
+On Windows, after the current tournament has finished, from the repository root:
+`git pull; .\build.ps1`, then `.\package.ps1`. Check that the build passes 428 native checks and
+79 plus 23 C# tests, that the Tournament page shows the engine ratings, colors, legend and Sort by
+rating button, and that Stop during a match logs "Stop requested", shows "Stopping...", then
+"Stopped", and unlocks the settings.

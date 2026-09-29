@@ -34,7 +34,8 @@ native/                          C++ core, exported as a C ABI (fcd_core.dll)
                                  statistics and SPRT (stats.cpp), pairings (formats.cpp),
                                  tool command lines (tools.cpp, cmdline.cpp), JSON input (json.cpp),
                                  processes (process.cpp), UCI client (uci.cpp), analysis (analysis.cpp),
-                                 tournament runner (tournament.cpp); ABI entry points in api*.cpp
+                                 tournament runner (tournament.cpp), engine rating lists (ratings.cpp);
+                                 ABI entry points in api*.cpp
   tests/                         fcd_tests (uses only the public header), fake_fastchess and
                                  fake_uci_engine test programs, test data
   third_party/chess-library/     chess.hpp 0.9.4 (MIT) with one local patch

@@ -1,5 +1,6 @@
 // Tests for processes, UCI engines, analysis and the tournament runner. They run the fake
 // programs built with the tests (fake_fastchess, fake_uci_engine).
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstring>
@@ -99,6 +100,47 @@ void test_process_cancel_and_orphans() {
     CHECK_OK(fcd_process_run(FCD_FAKE_FASTCHESS, orphan, nullptr, nullptr, nullptr, nullptr, &r));
     CHECK(r.exit_code == 0 && r.cancelled == 0);
     CHECK(std::chrono::steady_clock::now() - orphan_started < std::chrono::seconds(30));
+}
+
+// A child outside the process tree (one that left the job object or process group) holds the output
+// pipes open. Stopping the tree cannot end it, so the run stops reading instead of waiting for it,
+// with or without a cancel. On Windows our job forbids breakaway, so the child stays in the tree
+// and only the time limits are checked there.
+void test_process_escaped_child() {
+    using namespace std::chrono;
+    auto still_open = [](const Collected& c) {
+        size_t n = 0;
+        for (const auto& [stream, text] : c.lines) n += stream == 1 && contains(text, "was still open") ? 1 : 0;
+        return n;
+    };
+
+    Collected finished;
+    fcd_process_result r{};
+    auto started = steady_clock::now();
+    const char* escape = R"(["-engine","cmd=escape","name=A","-engine","cmd=1","name=B","-games","1"])";
+    CHECK_OK(fcd_process_run(FCD_FAKE_FASTCHESS, escape, nullptr, on_line, &finished, nullptr, &r));
+    CHECK(r.exit_code == 0 && r.cancelled == 0);
+    CHECK(steady_clock::now() - started < seconds(12));
+    CHECK(!finished.lines.empty() && finished.lines.back().second != "" &&
+          std::any_of(finished.lines.begin(), finished.lines.end(),
+                      [](const auto& l) { return l.second == "Tournament finished"; }));
+#ifndef _WIN32
+    CHECK(still_open(finished) == 1);
+#endif
+
+    fcd_cancel* cancel = nullptr;
+    CHECK_OK(fcd_cancel_new(&cancel));
+    Collected stopped;
+    stopped.cancel_on_first_line = cancel;
+    started = steady_clock::now();
+    const char* escape_and_hang = R"(["-engine","cmd=escape","name=A","-engine","cmd=hang","name=B"])";
+    CHECK_OK(fcd_process_run(FCD_FAKE_FASTCHESS, escape_and_hang, nullptr, on_line, &stopped, cancel, &r));
+    CHECK(r.cancelled == 1);
+    CHECK(steady_clock::now() - started < seconds(8));
+#ifndef _WIN32
+    CHECK(still_open(stopped) == 1);
+#endif
+    fcd_cancel_free(cancel);
 }
 
 void test_uci_engine() {
@@ -278,6 +320,7 @@ void test_tournaments() {
 void run_process_tests() {
     test_process_run();
     test_process_cancel_and_orphans();
+    test_process_escaped_child();
     test_uci_engine();
     test_tournaments();
 }

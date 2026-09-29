@@ -6,10 +6,14 @@
 //   cmd=hang     print the first "Started game" line, then never finish (for cancellation)
 //   cmd=orphan   play normally, but leave a child process running that holds the output pipes
 //                open (as engines of a crashed fastchess would)
+//   cmd=escape   first start a child outside the process tree (a new session on POSIX, a job
+//                breakaway on Windows) that holds the output pipes open for 15 s; then play
+//                normally. Stopping the tree does not reach it.
 //   cmd=warn     strength 0, and a fastchess engine warning block (Warning;, Info;, Position;,
 //                Moves;) about this engine in every game it plays
 //                (and, once, a fastchess warning that names no engine)
-// It also writes one line to standard error. "--sleep" runs the orphan child.
+// It also writes one line to standard error. "--sleep" runs the orphan child, "--linger" the
+// escaped one.
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -54,11 +58,41 @@ void start_orphan(const char* self) {
 #endif
 }
 
+// Our job does not allow breakaway, so on Windows this child normally stays in the job (and the
+// tests then only see the ordinary path); on POSIX setsid() always takes it out of the group.
+void start_escaped(const char* self) {
+#ifdef _WIN32
+    (void)self;
+    wchar_t path[MAX_PATH];
+    GetModuleFileNameW(nullptr, path, MAX_PATH);
+    std::wstring command = L"\"" + std::wstring(path) + L"\" --linger";
+    STARTUPINFOW si{};
+    si.cb = sizeof si;
+    PROCESS_INFORMATION pi{};
+    if (CreateProcessW(path, command.data(), nullptr, nullptr, TRUE, CREATE_BREAKAWAY_FROM_JOB, nullptr, nullptr, &si,
+                       &pi) ||
+        CreateProcessW(path, command.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &si, &pi)) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+#else
+    if (fork() == 0) {
+        setsid();
+        execl(self, self, "--linger", static_cast<char*>(nullptr));
+        _exit(0);
+    }
+#endif
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     std::vector<std::string> args(argv + 1, argv + argc);
     if (!args.empty() && args[0] == "--sleep") sleep_forever();
+    if (!args.empty() && args[0] == "--linger") {
+        std::this_thread::sleep_for(std::chrono::seconds(15));
+        return 0;
+    }
 #ifdef _WIN32
     // Line endings exactly as written below (the test covers both "\n" and "\r\n").
     _setmode(_fileno(stdout), _O_BINARY);
@@ -89,6 +123,7 @@ int main(int argc, char** argv) {
         if (e.second == "fail") return 1;
         hang = hang || e.second == "hang";
         orphan = orphan || e.second == "orphan";
+        if (e.second == "escape") start_escaped(argv[0]);
     }
 
     std::vector<std::pair<size_t, size_t>> pairs;

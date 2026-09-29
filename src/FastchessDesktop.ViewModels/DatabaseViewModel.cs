@@ -395,8 +395,9 @@ public sealed partial class DatabaseViewModel : ObservableObject, IDisposable
         ImportResult? result = null;
         await RunBusyAsync("Importing " + Path.GetFileName(path), async (ct, progress) =>
         {
-            var r = await Task.Run(() => db.ImportPgn(path, SkipDuplicatesOnImport,
-                new Progress<NativeProgress>(p => progress($"Importing: {p.Done} games read", null)), ct), ct);
+            // Created here, on the UI thread, so reports come back to it (not inside Task.Run).
+            var reporter = new Progress<NativeProgress>(p => progress($"Importing: {p.Done} games read", null));
+            var r = await Task.Run(() => db.ImportPgn(path, SkipDuplicatesOnImport, reporter, ct), ct);
             Log.Add($"Imported {r.Imported} games from {Path.GetFileName(path)} ({r.Duplicates} duplicates skipped, {r.Failed} unreadable).",
                 LogKind.Success);
             result = r;
@@ -419,9 +420,9 @@ public sealed partial class DatabaseViewModel : ObservableObject, IDisposable
         if (options.HasFlag(FillOptions.Opening) && (book = await GetOpeningBookAsync()) is null) return;
         await RunBusyAsync(text, async (ct, progress) =>
         {
-            var n = await Task.Run(() => db.FillMissing(scope, book, options,
-                new Progress<NativeProgress>(p => progress($"{text}: {p.Done} of {p.Total}", p.Total > 0 ? (double)p.Done / p.Total : null)),
-                ct), ct);
+            var reporter = new Progress<NativeProgress>(p =>
+                progress($"{text}: {p.Done} of {p.Total}", p.Total > 0 ? (double)p.Done / p.Total : null));
+            var n = await Task.Run(() => db.FillMissing(scope, book, options, reporter, ct), ct);
             Log.Add($"{text}: {n} game(s) updated.", LogKind.Success);
         });
         await ReloadAsync();

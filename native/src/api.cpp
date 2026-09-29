@@ -1,4 +1,4 @@
-// C ABI entry points for the library, the game database and the opening book.
+// C ABI entry points for the library, the game database, the opening book and rating lists.
 // Every function catches all exceptions and converts them to fcd_status plus a
 // thread-local message (abi.hpp). Tools, statistics and processes: api_tools.cpp.
 #include <cstdlib>
@@ -7,7 +7,9 @@
 #include "database.hpp"
 #include "exporters.hpp"
 #include "fcd/fcd.h"
+#include "json.hpp"
 #include "openings.hpp"
+#include "ratings.hpp"
 #include "util.hpp"
 
 struct fcd_db {
@@ -17,6 +19,10 @@ struct fcd_db {
 
 struct fcd_openings {
     fcd::OpeningBook impl;
+};
+
+struct fcd_ratings {
+    fcd::ratings::List impl;
 };
 
 namespace {
@@ -187,6 +193,39 @@ FCD_API fcd_status fcd_openings_classify_uci(const fcd_openings* book, const cha
             out += ",\"variation\":";
             fcd::json_string(out, rest);
             out += ",\"ply\":" + std::to_string(match->ply) + "}";
+        }
+        *out_json = fcd::dup_for_caller(out);
+    });
+}
+
+FCD_API fcd_status fcd_ratings_load_csv(const char* csv_path, fcd_ratings** out_list) {
+    return guarded([&] {
+        require(csv_path, "csv_path");
+        require(out_list, "out_list");
+        *out_list = nullptr;
+        *out_list = new fcd_ratings{fcd::ratings::List::load(csv_path)};
+    });
+}
+
+FCD_API void fcd_ratings_free(fcd_ratings* list) { delete list; }
+
+FCD_API int64_t fcd_ratings_count(const fcd_ratings* list) {
+    return list ? static_cast<int64_t>(list->impl.size()) : 0;
+}
+
+FCD_API fcd_status fcd_ratings_lookup(const fcd_ratings* list, const char* engine_name, char** out_json) {
+    return guarded([&] {
+        require(list, "list");
+        require(engine_name, "engine_name");
+        require(out_json, "out_json");
+        *out_json = nullptr;
+        std::string out = "null";
+        if (const auto m = list->impl.lookup(engine_name)) {
+            out = "{\"player\":";
+            fcd::json_string(out, m->player);
+            out += ",\"rating\":" + fcd::json::number(m->rating) + ",\"games\":" + std::to_string(m->games) +
+                   ",\"estimated\":" + (m->estimated ? "true" : "false") +
+                   ",\"baseRating\":" + fcd::json::number(m->base_rating) + "}";
         }
         *out_json = fcd::dup_for_caller(out);
     });

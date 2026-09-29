@@ -10,10 +10,14 @@ public sealed record ToolPaths
     public string PgnExtract { get; init; } = "";
     public string OpeningsTsv { get; init; } = "";
 
+    /// <summary>Engine rating list (Ordo CSV) used to rate and sort the tournament's engines.</summary>
+    public string RatingList { get; init; } = "";
+
     /// <summary>
     /// Fills empty entries from the application's bundled layout:
     /// tools\fastchess\fastchess.exe, tools\ordo\ordo-win64.exe, tools\ordoprep\ordoprep-win64.exe,
-    /// tools\pgn-extract\pgn-extract.exe, tools\stockfish\*.exe and data\lichess-openings.tsv.
+    /// tools\pgn-extract\pgn-extract.exe, tools\stockfish\*.exe, data\lichess-openings.tsv and
+    /// data\ucerl-ratings.csv.
     /// </summary>
     public ToolPaths WithDefaults(string appDirectory)
     {
@@ -44,6 +48,7 @@ public sealed record ToolPaths
             Ordoprep = Find(Ordoprep, Path.Combine("tools", "ordoprep"), "ordoprep-win64.exe", "ordoprep"),
             PgnExtract = Find(PgnExtract, Path.Combine("tools", "pgn-extract"), "pgn-extract.exe", "pgn-extract"),
             OpeningsTsv = Find(OpeningsTsv, "data", "lichess-openings.tsv"),
+            RatingList = Find(RatingList, "data", "ucerl-ratings.csv"),
         };
     }
 }

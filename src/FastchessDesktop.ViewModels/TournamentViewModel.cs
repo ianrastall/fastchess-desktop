@@ -4,13 +4,14 @@ using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using FastchessDesktop.Core.Engines;
+using FastchessDesktop.Core.Native;
 using FastchessDesktop.Core.Tools;
 using FastchessDesktop.ViewModels.Services;
 
 namespace FastchessDesktop.ViewModels;
 
 /// <summary>The Tournament page: fastchess configuration, run control and live log.</summary>
-public sealed partial class TournamentViewModel : ObservableObject
+public sealed partial class TournamentViewModel : ObservableObject, IDisposable
 {
     private readonly IDialogService _dialogs;
     private readonly IUiDispatcher _dispatcher;
@@ -34,8 +35,14 @@ public sealed partial class TournamentViewModel : ObservableObject
         Log = new LogViewModel(dispatcher);
         Engines.CollectionChanged += OnEnginesChanged;
         PropertyChanged += OnAnyPropertyChanged;
+        _settings.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SettingsViewModel.RatingListPath)) UpdateRatings();
+        };
         UpdatePreview();
     }
+
+    public void Dispose() => _ratingList?.Dispose();
 
     public LogViewModel Log { get; }
 
@@ -318,6 +325,7 @@ public sealed partial class TournamentViewModel : ObservableObject
         Engines.Add(engine);
         SelectedEngine = engine;
         await DetectNameAsync(engine, keepUserEdits: true);
+        PlaceByRating(engine);
     }
 
     [RelayCommand(CanExecute = nameof(HasSelectedEngine))]
@@ -458,44 +466,62 @@ public sealed partial class TournamentViewModel : ObservableObject
         Log.Add("Working directory: " + runDir);
         var staged = !TournamentFormats.IsRunByFastchess(settings.Type);
 
+        // Stop cancels on the UI thread; say so at once, since stopping the process tree and
+        // collecting its last output can take a moment.
+        var stopping = cancellationToken.Register(() =>
+        {
+            Log.Add("Stop requested: stopping fastchess and its engines...", LogKind.Warning);
+            ProgressText = "Stopping...";
+        });
+
+        TournamentOutcome result;
         try
         {
-            var result = await new TournamentRunner().RunAsync(fastchess, runDir, settings, OnOutputLine, OnEvent, cancellationToken);
-            if (result.Cancelled && staged)
-            {
-                Log.Add($"Stopped by user after {result.Duration:hh\\:mm\\:ss}. {settings.Type} tournaments cannot be resumed; " +
-                        "the games played so far are in the PGN file.", LogKind.Error);
-            }
-            else if (result.Cancelled)
-            {
-                var state = string.IsNullOrWhiteSpace(settings.StateFile) ? Path.Combine(runDir, "config.json") : settings.StateFile;
-                Log.Add($"Stopped by user after {result.Duration:hh\\:mm\\:ss}. To resume, add " +
-                        $"-config file={CommandLine.Quote(state)} to Extra arguments.", LogKind.Error);
-            }
-            else
-            {
-                Log.Add(staged && result.ExitCode == 0
-                        ? $"{settings.Type} tournament completed after {result.Duration:hh\\:mm\\:ss}."
-                        : $"fastchess exited with code {result.ExitCode} after {result.Duration:hh\\:mm\\:ss}.",
-                    result.ExitCode == 0 ? LogKind.Success : LogKind.Error);
-            }
-            ProgressText = result.Cancelled ? "Stopped" : result.ExitCode == 0 ? "Finished" : $"Failed (exit code {result.ExitCode})";
-
-            ReportOutputChecks(completed: !result.Cancelled && result.ExitCode == 0);
-
-            LastPgnPath = File.Exists(settings.PgnOut) ? settings.PgnOut : "";
-            if (ImportResults && LastPgnPath.Length > 0) await ImportLastGamesAsync();
+            result = await new TournamentRunner().RunAsync(fastchess, runDir, settings, OnOutputLine, OnEvent, cancellationToken);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
+            IsRunning = false;
             Log.Error(e.Message);
             ProgressText = "Failed";
             await _dialogs.ShowMessageAsync("Tournament failed", e.Message);
+            return;
         }
         finally
         {
+            // The run is over once fastchess has exited: the settings unlock before the import below,
+            // which can take a while (a large database, or one busy with another job).
+            stopping.Dispose();
             IsRunning = false;
         }
+
+        ReportRunEnd(settings, result, runDir, staged);
+        LastPgnPath = File.Exists(settings.PgnOut) ? settings.PgnOut : "";
+        if (ImportResults && LastPgnPath.Length > 0) await ImportLastGamesAsync();
+    }
+
+    private void ReportRunEnd(TournamentSettings settings, TournamentOutcome result, string runDir, bool staged)
+    {
+        if (result.Cancelled && staged)
+        {
+            Log.Add($"Stopped by user after {result.Duration:hh\\:mm\\:ss}. {settings.Type} tournaments cannot be resumed; " +
+                    "the games played so far are in the PGN file.", LogKind.Error);
+        }
+        else if (result.Cancelled)
+        {
+            var state = string.IsNullOrWhiteSpace(settings.StateFile) ? Path.Combine(runDir, "config.json") : settings.StateFile;
+            Log.Add($"Stopped by user after {result.Duration:hh\\:mm\\:ss}. To resume, add " +
+                    $"-config file={CommandLine.Quote(state)} to Extra arguments.", LogKind.Error);
+        }
+        else
+        {
+            Log.Add(staged && result.ExitCode == 0
+                    ? $"{settings.Type} tournament completed after {result.Duration:hh\\:mm\\:ss}."
+                    : $"fastchess exited with code {result.ExitCode} after {result.Duration:hh\\:mm\\:ss}.",
+                result.ExitCode == 0 ? LogKind.Success : LogKind.Error);
+        }
+        ProgressText = result.Cancelled ? "Stopped" : result.ExitCode == 0 ? "Finished" : $"Failed (exit code {result.ExitCode})";
+        ReportOutputChecks(completed: !result.Cancelled && result.ExitCode == 0);
     }
 
     /// <summary>PGN file of the last run, for importing it later.</summary>
@@ -521,12 +547,23 @@ public sealed partial class TournamentViewModel : ObservableObject
             return;
         }
         Log.Add($"Importing {LastPgnPath} into {_database.Title}...");
-        var imported = await _database.ImportFileAsync(LastPgnPath);
-        if (imported is { } r)
-            Log.Add($"Imported {r.Imported} games into {_database.Title} ({r.Duplicates} duplicates skipped, {r.Failed} unreadable). " +
-                    "They are on the Database page.", LogKind.Success);
-        else
-            Log.Add("The import did not finish. The Database page log has the reason.", LogKind.Error);
+        if (_database.IsBusy)
+            Log.Add($"The database is busy ({_database.BusyText}); the games are imported when that finishes.", LogKind.Warning);
+        try
+        {
+            var imported = await _database.ImportFileAsync(LastPgnPath);
+            if (imported is { } r)
+                Log.Add($"Imported {r.Imported} games into {_database.Title} ({r.Duplicates} duplicates skipped, {r.Failed} unreadable). " +
+                        "They are on the Database page.", LogKind.Success);
+            else
+                Log.Add("The import did not finish. The Database page log has the reason.", LogKind.Error);
+        }
+        catch (Exception e) when (e is FastchessDesktop.Core.Native.FcdException or IOException or InvalidOperationException
+                                      or UnauthorizedAccessException)
+        {
+            // Raised by the import that runs beside another database job; it must not escape the command.
+            Log.Error("The games were not imported: " + e.Message);
+        }
     }
 
     private bool CanImportLastGames() => LastPgnPath.Length > 0 && !IsRunning;
@@ -743,8 +780,110 @@ public sealed partial class TournamentViewModel : ObservableObject
             engine.PropertyChanged -= OnEngineChanged;
         if (e.Action == NotifyCollectionChangedAction.Reset)
             foreach (var engine in Engines) engine.PropertyChanged += OnEngineChanged;
+        if (e.Action is NotifyCollectionChangedAction.Add or NotifyCollectionChangedAction.Replace)
+            foreach (EngineViewModel engine in e.NewItems ?? Array.Empty<EngineViewModel>())
+                UpdateRating(engine);
         UpdatePreview();
     }
 
-    private void OnEngineChanged(object? sender, PropertyChangedEventArgs e) => UpdatePreview();
+    private void OnEngineChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // Rating, RatingNote and the properties derived from them do not change the command line.
+        if (e.PropertyName is nameof(EngineViewModel.Rating) or nameof(EngineViewModel.RatingNote)
+            or nameof(EngineViewModel.RatingText) or nameof(EngineViewModel.RatingDetail) or nameof(EngineViewModel.Tier)
+            or nameof(EngineViewModel.Status))
+            return;
+        if (sender is EngineViewModel engine && e.PropertyName is nameof(EngineViewModel.DisplayName))
+            UpdateRating(engine);
+        UpdatePreview();
+    }
+
+    // ---- Engine ratings ----
+
+    private RatingList? _ratingList;
+    private string? _ratingListPath;
+    private string _ratingListNote = "";
+
+    /// <summary>
+    /// The rating list from Settings (the bundled UCERL list by default), loaded again when its path
+    /// changes. Null when none is configured or it cannot be read; the reason is in _ratingListNote.
+    /// </summary>
+    private RatingList? CurrentRatingList()
+    {
+        var path = _settings.EffectiveTools.RatingList;
+        if (path == _ratingListPath) return _ratingList;
+        _ratingListPath = path;
+        _ratingList?.Dispose();
+        _ratingList = null;
+        if (path.Length == 0 || !File.Exists(path))
+        {
+            _ratingListNote = "No engine rating list: set one in Settings (Engine rating list)." +
+                              (path.Length > 0 ? " Not found: " + path : "");
+            return null;
+        }
+        try
+        {
+            _ratingList = RatingList.LoadCsv(path);
+            _ratingListNote = $"Not in the rating list ({Path.GetFileName(path)}); sorted after the rated engines.";
+        }
+        catch (FcdException e)
+        {
+            _ratingListNote = "The engine rating list could not be read: " + e.Message;
+            Log.Add(_ratingListNote, LogKind.Warning);
+        }
+        return _ratingList;
+    }
+
+    /// <summary>Looks the engine up in the rating list by the name fastchess will use for it.</summary>
+    private void UpdateRating(EngineViewModel engine)
+    {
+        var list = CurrentRatingList();
+        var name = FastchessCommandBuilder.EngineName(engine.ToSettings());
+        engine.RatingNote = _ratingListNote;
+        try
+        {
+            engine.Rating = list is null || name.Length == 0 ? null : list.Lookup(name);
+        }
+        catch (FcdException)
+        {
+            engine.Rating = null;
+        }
+    }
+
+    private void UpdateRatings()
+    {
+        foreach (var engine in Engines) UpdateRating(engine);
+    }
+
+    /// <summary>
+    /// Orders the engines by rating, strongest first. Engines without a rating keep their order after
+    /// the rated ones. The order is the seeding for gauntlet, pyramid and knockout tournaments.
+    /// </summary>
+    [RelayCommand]
+    private void SortEnginesByRating()
+    {
+        var selected = SelectedEngine;
+        var sorted = Engines.OrderByDescending(e => e.Rating?.Rating ?? double.NegativeInfinity).ToList();
+        for (var i = 0; i < sorted.Count; i++)
+        {
+            var from = Engines.IndexOf(sorted[i]);
+            if (from != i) Engines.Move(from, i);
+        }
+        SelectedEngine = selected;
+    }
+
+    /// <summary>
+    /// Moves a newly added engine to its place by rating: before the first engine that is rated lower
+    /// or not rated. An engine without a rating stays where it was added, at the end.
+    /// </summary>
+    private void PlaceByRating(EngineViewModel engine)
+    {
+        if (engine.Rating is not { } rating) return;
+        var others = Engines.Where(e => !ReferenceEquals(e, engine)).ToList();
+        var to = others.FindIndex(e => e.Rating is not { } r || r.Rating < rating.Rating);
+        if (to < 0) to = others.Count;
+        var from = Engines.IndexOf(engine);
+        if (from != to) Engines.Move(from, to);
+        SelectedEngine = engine;
+    }
 }

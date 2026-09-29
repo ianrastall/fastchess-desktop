@@ -1,5 +1,6 @@
 #include "process.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <mutex>
@@ -18,6 +19,7 @@
 #include <windows.h>
 #else
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -57,21 +59,36 @@ void LineSplitter::finish() {
 
 namespace {
 
+// How long output may stay open after the process tree was stopped. Only a process outside the
+// tree (one that escaped the job object or process group) can hold the pipes that long.
+constexpr int kStoppedOutputGraceMs = 3000;
+
 // Reader threads and line delivery, shared by both platforms.
 class ChildBase : public Child {
    public:
     bool output_finished() const override { return open_streams_.load() == 0; }
 
+    bool output_abandoned() const override { return abandoned_.load(); }
+
     void finish_output(int timeout_ms) override {
-        const auto deadline = Clock::now() + std::chrono::milliseconds(timeout_ms);
-        while (open_streams_.load() > 0 && Clock::now() < deadline) std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        if (open_streams_.load() > 0) kill_tree();
-        for (auto& t : readers_)
-            if (t.joinable()) t.join();
+        if (!wait_for_output(timeout_ms)) {
+            kill_tree();
+            if (!wait_for_output(kStoppedOutputGraceMs)) {
+                abandoned_.store(true);
+                interrupt_readers();
+            }
+        }
+        join_readers();
     }
 
    protected:
     explicit ChildBase(LineHandler on_line) : on_line_(std::move(on_line)) {}
+
+    // Set by finish_output when the output is given up; the readers then report end of file.
+    bool abandoning() const { return abandoned_.load(); }
+
+    // Makes readers blocked in a read notice abandoning(). POSIX readers poll, so they need nothing.
+    virtual void interrupt_readers() {}
 
     // Reads one pipe until end of file. read_some returns the byte count, 0 at end of file.
     template <typename ReadSome>
@@ -98,7 +115,14 @@ class ChildBase : public Child {
     LineHandler on_line_;
     std::mutex deliver_mutex_;
     std::atomic<int> open_streams_{2};
+    std::atomic<bool> abandoned_{false};
     std::thread readers_[2];
+
+    bool wait_for_output(int timeout_ms) {
+        const auto deadline = Clock::now() + std::chrono::milliseconds(timeout_ms);
+        while (open_streams_.load() > 0 && Clock::now() < deadline) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        return open_streams_.load() == 0;
+    }
 
     void deliver(Stream stream, const std::string& raw) {
         if (!on_line_) return;
@@ -217,15 +241,18 @@ class WinChild final : public ChildBase {
         CloseHandle(pi.hThread);
 
         const HANDLE out = out_r_, err = err_r_;
-        auto reader = [](HANDLE h) {
-            return [h](char* buffer, size_t size) -> long {
+        auto reader = [this](HANDLE h, int index) {
+            return [this, h, index](char* buffer, size_t size) -> long {
+                register_reader_thread(index);
+                if (abandoning()) return 0;
                 DWORD n = 0;
+                // Fails with ERROR_OPERATION_ABORTED when interrupt_readers cancels it.
                 if (!ReadFile(h, buffer, static_cast<DWORD>(size), &n, nullptr)) return 0;
                 return static_cast<long>(n);
             };
         };
-        start_reader(0, Stream::Stdout, reader(out));
-        start_reader(1, Stream::Stderr, reader(err));
+        start_reader(0, Stream::Stdout, reader(out, 0));
+        start_reader(1, Stream::Stderr, reader(err, 1));
     }
 
     ~WinChild() override {
@@ -239,6 +266,8 @@ class WinChild final : public ChildBase {
         CloseHandle(err_r_);
         CloseHandle(process_);
         if (job_) CloseHandle(job_);  // stops anything still running in the job
+        for (auto& t : reader_threads_)
+            if (const HANDLE h = t.load()) CloseHandle(h);
     }
 
     void write_line(const std::string& line) override {
@@ -269,11 +298,34 @@ class WinChild final : public ChildBase {
         else TerminateProcess(process_, 1);
     }
 
+   protected:
+    // A reader blocked in ReadFile on a pipe that another process keeps open never returns on its
+    // own. Cancel its read until it has stopped; the loop also covers a reader that was between
+    // its abandoning() check and ReadFile when the first cancel came.
+    void interrupt_readers() override {
+        const auto deadline = Clock::now() + std::chrono::milliseconds(kStoppedOutputGraceMs);
+        while (!output_finished() && Clock::now() < deadline) {
+            for (auto& t : reader_threads_)
+                if (const HANDLE h = t.load()) CancelSynchronousIo(h);
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+
    private:
     HANDLE process_ = nullptr, job_ = nullptr, stdin_w_ = nullptr, out_r_ = nullptr, err_r_ = nullptr;
+    std::atomic<HANDLE> reader_threads_[2]{};
     std::mutex write_mutex_;
     int exit_code_ = 0;
     bool exited_ = false;
+
+    // Called on the reader thread: keeps a real handle to it for CancelSynchronousIo.
+    void register_reader_thread(int index) {
+        if (reader_threads_[index].load()) return;
+        HANDLE self = nullptr;
+        if (DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(), &self, 0, FALSE,
+                            DUPLICATE_SAME_ACCESS))
+            reader_threads_[index].store(self);
+    }
 };
 
 #else  // POSIX
@@ -338,11 +390,17 @@ class PosixChild final : public ChildBase {
         out_r_ = out[0];
         err_r_ = err[0];
 
-        auto reader = [](int fd) {
-            return [fd](char* buffer, size_t size) -> long {
+        // Waits in poll rather than read, so a reader notices abandoning() within 100 ms.
+        auto reader = [this](int fd) {
+            return [this, fd](char* buffer, size_t size) -> long {
                 for (;;) {
+                    if (abandoning()) return 0;
+                    pollfd p{fd, POLLIN, 0};
+                    const int ready = poll(&p, 1, 100);
+                    if (ready == 0 || (ready < 0 && errno == EINTR)) continue;
+                    if (ready < 0) return 0;
                     const ssize_t n = read(fd, buffer, size);
-                    if (n < 0 && errno == EINTR) continue;
+                    if (n < 0 && (errno == EINTR || errno == EAGAIN)) continue;
                     return static_cast<long>(n < 0 ? 0 : n);
                 }
             };
@@ -438,8 +496,15 @@ RunResult run(const Options& options, const LineHandler& on_line, const Cancel* 
         }
     }
     // Normally the output ends with the process. Engines left running by a crashed fastchess keep
-    // the pipes open; after a grace period they are stopped with the rest of the tree.
-    child->finish_output(5000);
+    // the pipes open; after a grace period they are stopped with the rest of the tree. After a
+    // cancel the tree was stopped already, so only a short wait for the last output is needed.
+    child->finish_output(result.cancelled ? 1000 : 5000);
+    if (child->output_abandoned() && on_line) {
+        const auto name = utf8_path(options.program).filename().u8string();
+        on_line(Stream::Stderr, "fcd: the output of " + std::string(name.begin(), name.end()) +
+                                    " was still open after its processes were stopped; a process outside the "
+                                    "process tree holds it. Stopped reading it.");
+    }
     result.exit_code = child->exit_code();
     result.duration_ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - started).count();

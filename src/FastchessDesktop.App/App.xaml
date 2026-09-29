@@ -12,6 +12,15 @@
 
             <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, Courier New</FontFamily>
 
+            <!-- Engine rating tiers of 200 Elo (EngineViewModel.TierOf); 0 is not rated. Used by TierColors and the legend. -->
+            <SolidColorBrush x:Key="RatingTier0Brush" Color="#8A8A8A" />
+            <SolidColorBrush x:Key="RatingTier1Brush" Color="#C58AF9" />
+            <SolidColorBrush x:Key="RatingTier2Brush" Color="#8AB4F8" />
+            <SolidColorBrush x:Key="RatingTier3Brush" Color="#78D9EC" />
+            <SolidColorBrush x:Key="RatingTier4Brush" Color="#81C995" />
+            <SolidColorBrush x:Key="RatingTier5Brush" Color="#E8C06A" />
+            <SolidColorBrush x:Key="RatingTier6Brush" Color="#F6AE7C" />
+
             <Style x:Key="SectionHeaderStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
                 <Setter Property="Margin" Value="0,12,0,4" />
             </Style>

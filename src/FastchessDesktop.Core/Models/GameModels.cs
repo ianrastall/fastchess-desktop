@@ -80,6 +80,19 @@ public sealed record OpeningInfo
     public int Ply { get; init; }
 }
 
+/// <summary>
+/// An engine's rating from a rating list. Estimated: the engine is a newer version of Player, which
+/// is listed with BaseRating; Rating is then BaseRating plus 10.
+/// </summary>
+public sealed record EngineRating
+{
+    public string Player { get; init; } = "";
+    public double Rating { get; init; }
+    public long Games { get; init; }
+    public bool Estimated { get; init; }
+    public double BaseRating { get; init; }
+}
+
 public readonly record struct ImportResult(long Imported, long Duplicates, long Failed);
 
 public enum ExportFormat
@@ -148,4 +161,5 @@ public sealed record GameQuery
 [JsonSerializable(typeof(GameDetail))]
 [JsonSerializable(typeof(List<PlayerRating>))]
 [JsonSerializable(typeof(OpeningInfo))]
+[JsonSerializable(typeof(EngineRating))]
 internal sealed partial class NativeJsonContext : JsonSerializerContext;

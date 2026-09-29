@@ -84,6 +84,7 @@
     <StockfishExe Include="$(AssetsDir)stockfish\**\*.exe" />
     <Content Include="@(StockfishExe)" Link="tools\stockfish\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="$(AssetsDir)lichess-openings\lichess-openings.tsv" Link="data\lichess-openings.tsv" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(AssetsDir)ucerl\ucerl-ratings.csv" Link="data\ucerl-ratings.csv" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Runs before any target that lists or copies content, so the extracted files exist in time. -->

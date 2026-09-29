@@ -40,5 +40,6 @@ public static class FileFilters
     public static readonly IReadOnlyList<FileFilter> Executable = [new("Programs", ".exe")];
     public static readonly IReadOnlyList<FileFilter> Openings = [new("Opening books", ".epd", ".pgn")];
     public static readonly IReadOnlyList<FileFilter> Tsv = [new("Tab-separated values", ".tsv")];
+    public static readonly IReadOnlyList<FileFilter> Csv = [new("Rating list (Ordo CSV)", ".csv")];
     public static readonly IReadOnlyList<FileFilter> Any = [new("All files", "*")];
 }

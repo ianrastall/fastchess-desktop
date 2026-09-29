@@ -27,6 +27,23 @@ public sealed class NativeTests : IDisposable
     }
 
     [Fact]
+    public void Rating_list_rates_listed_engines_and_estimates_newer_versions()
+    {
+        using var list = RatingList.LoadCsv(Path.Combine(Data, "ucerl-ratings.csv"));
+        Assert.Equal(7427, list.Count);
+
+        var sf18 = list.Lookup("Stockfish 18");
+        Assert.Equal(new EngineRating { Player = "Stockfish 18", Rating = 3823.3, Games = 461772, BaseRating = 3823.3 }, sf18);
+        var sf19 = list.Lookup("Stockfish 19");
+        Assert.Equal(new EngineRating { Player = "Stockfish 18", Rating = 3833.3, Games = 461772, Estimated = true, BaseRating = 3823.3 },
+            sf19);
+        Assert.Null(list.Lookup("Not An Engine 1.0"));
+
+        var missing = Assert.Throws<FcdException>(() => RatingList.LoadCsv(Path.Combine(_dir.FullName, "none.csv")));
+        Assert.Equal(FcdStatus.NotFound, missing.Status);
+    }
+
+    [Fact]
     public void Query_sort_page_and_search()
     {
         using var db = OpenWithSample();
