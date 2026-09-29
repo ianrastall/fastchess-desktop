@@ -143,6 +143,34 @@ public class FastchessOutputParserTests
             FastchessOutputParser.Parse("SPRT ([0.00, 2.00]) completed - H1 was accepted"));
         Assert.Null(FastchessOutputParser.Parse("Elo: 12.3 +/- 4.5, nElo: 20.1 +/- 7.7"));
     }
+
+    [Theory]
+    // A PV check block as fastchess 1.8.2 prints it (match.cpp verifyPvLines).
+    [InlineData("Warning; Bestmove does not match beginning of last PV - move f7e6 from Berserk 14", FastchessLineKind.Warning)]
+    [InlineData("Info; info depth 14 seldepth 17 multipv 1 score cp 0 nodes 16436 pv a4a2 c6c7", FastchessLineKind.Warning)]
+    [InlineData("Position; fen r1bq1rk1/pp2ppbp/2np1np1/8/3NPP2/2N1B3/PPP1B1PP/R2QK2R w KQ - 0 1", FastchessLineKind.Warning)]
+    [InlineData("Moves; d1d2 c6d4 e3d4", FastchessLineKind.Warning)]
+    [InlineData("Finished game 4 (Reckless 0.9.0 vs Berserk 14): 0-1 {Black mates}", FastchessLineKind.Normal)]
+    [InlineData("Finished game 9 (A vs B): 1/2-1/2 {Draw by insufficient mating material}", FastchessLineKind.Normal)]
+    [InlineData("Finished game 2 (A vs B): 0-1 {White loses on time (12ms overrun)}", FastchessLineKind.EngineFailure)]
+    [InlineData("Finished game 2 (A vs B): 1-0 {Black disconnects}", FastchessLineKind.EngineFailure)]
+    [InlineData("Finished game 2 (A vs B): 1-0 {Black's connection stalls}", FastchessLineKind.EngineFailure)]
+    [InlineData("Finished game 2 (A vs B): 0-1 {White makes an illegal move}", FastchessLineKind.EngineFailure)]
+    [InlineData("  Timeouts: 3", FastchessLineKind.EngineFailure)]
+    [InlineData("  Crashed: 0", FastchessLineKind.Normal)]
+    [InlineData("Games: 20, Wins: 1, Losses: 5, Draws: 14, Points: 8.0 (40.00 %)", FastchessLineKind.Normal)]
+    public void Classifies_warnings_and_engine_failures(string line, FastchessLineKind expected) =>
+        Assert.Equal(expected, FastchessOutputParser.Classify(line));
+
+    [Fact]
+    public void Finished_games_report_engine_failures()
+    {
+        var timeout = Assert.IsType<GameFinishedEvent>(
+            FastchessOutputParser.Parse("Finished game 2 (A vs B): 0-1 {White loses on time (12ms overrun)}"));
+        Assert.True(timeout.IsEngineFailure);
+        var mate = Assert.IsType<GameFinishedEvent>(FastchessOutputParser.Parse("Finished game 1 (A vs B): 1-0 {White mates}"));
+        Assert.False(mate.IsEngineFailure);
+    }
 }
 
 public class RatingToolArgsTests

@@ -13,6 +13,7 @@ public enum LogKind
     Output,
     Error,
     Success,
+    Warning,
 }
 
 public sealed record LogEntry(DateTime Time, LogKind Kind, string Text)

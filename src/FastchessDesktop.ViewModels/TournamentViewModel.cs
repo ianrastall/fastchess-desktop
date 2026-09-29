@@ -438,6 +438,8 @@ public sealed partial class TournamentViewModel : ObservableObject
 
         FinishedGames.Clear();
         Standings.Clear();
+        _outputWarnings = 0;
+        _engineFailures = 0;
         _scores.Clear();
         GamesFinished = 0;
         GamesTotal = settings.ExpectedGames ?? 1;
@@ -469,12 +471,24 @@ public sealed partial class TournamentViewModel : ObservableObject
             }
             ProgressText = result.Cancelled ? "Stopped" : result.ExitCode == 0 ? "Finished" : $"Failed (exit code {result.ExitCode})";
 
+            ReportOutputChecks(completed: !result.Cancelled && result.ExitCode == 0);
+
             if (ImportResults && File.Exists(settings.PgnOut))
             {
-                Log.Add("Importing " + settings.PgnOut + " into the database...");
-                var imported = await _database.ImportFileAsync(settings.PgnOut);
-                if (imported is { } r)
-                    Log.Add($"Imported {r.Imported} games ({r.Duplicates} duplicates skipped, {r.Failed} failed).", LogKind.Success);
+                if (!_database.IsOpen)
+                {
+                    Log.Add($"The games were not imported because no database is open. Open or create one on the Database page, " +
+                            $"then import {settings.PgnOut}.", LogKind.Warning);
+                }
+                else
+                {
+                    Log.Add($"Importing {settings.PgnOut} into {_database.Title}...");
+                    var imported = await _database.ImportFileAsync(settings.PgnOut);
+                    if (imported is { } r)
+                        Log.Add($"Imported {r.Imported} games ({r.Duplicates} duplicates skipped, {r.Failed} unreadable).", LogKind.Success);
+                    else
+                        Log.Add("The import did not finish. The Database page log has the reason.", LogKind.Error);
+                }
             }
         }
         catch (Exception e) when (e is not OperationCanceledException)
@@ -489,8 +503,39 @@ public sealed partial class TournamentViewModel : ObservableObject
         }
     }
 
-    private void OnOutputLine(OutputLine line) =>
-        Log.Add(line.Text, line.Stream == OutputStream.StandardError ? LogKind.Error : LogKind.Output);
+    private int _outputWarnings;
+    private int _engineFailures;
+
+    private void OnOutputLine(OutputLine line)
+    {
+        var kind = FastchessOutputParser.Classify(line.Text);
+        if (kind == FastchessLineKind.Warning && line.Text.TrimStart().StartsWith("Warning;", StringComparison.Ordinal))
+            Interlocked.Increment(ref _outputWarnings);
+        if (kind == FastchessLineKind.EngineFailure && FastchessOutputParser.Parse(line.Text) is GameFinishedEvent { IsEngineFailure: true })
+            Interlocked.Increment(ref _engineFailures);
+        Log.Add(line.Text, kind switch
+        {
+            FastchessLineKind.EngineFailure => LogKind.Error,
+            FastchessLineKind.Warning => LogKind.Warning,
+            _ => line.Stream == OutputStream.StandardError ? LogKind.Error : LogKind.Output,
+        });
+    }
+
+    /// <summary>Explains the fastchess warnings and failures seen during the run, so a clean run reads as clean.</summary>
+    private void ReportOutputChecks(bool completed)
+    {
+        var failures = Interlocked.Exchange(ref _engineFailures, 0);
+        var warnings = Interlocked.Exchange(ref _outputWarnings, 0);
+        if (failures > 0)
+            Log.Add($"{failures} game(s) ended by an engine failure (time loss, crash, stalled connection or illegal move). " +
+                    "Those lines are shown in red.", LogKind.Error);
+        else if (completed)
+            Log.Add("No game ended by an engine failure (time loss, crash, stalled connection or illegal move).", LogKind.Success);
+        if (warnings > 0)
+            Log.Add($"fastchess flagged {warnings} engine search output(s), shown in amber, for example a best move that is not " +
+                    "the first move of the engine's last reported PV. These are checks on what the engines print; " +
+                    "they do not change moves or results.", LogKind.Warning);
+    }
 
     /// <summary>Runner events arrive on a background thread: log lines now (keeps their order), UI state on the UI thread.</summary>
     private void OnEvent(FastchessEvent evt)

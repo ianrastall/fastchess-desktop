@@ -7,9 +7,9 @@ State of the repository on 2026-09-29, after the first Windows build and the own
 | Layer | Status |
 | --- | --- |
 | `native/` | Builds with MSVC through `native\build-native.ps1` (confirmed on the owner's machine) and with GCC on Linux. 109 checks pass. |
-| `FastchessDesktop.Core` | Warnings as errors; 47 tests pass on Linux, including the staged tournament runner. |
+| `FastchessDesktop.Core` | Warnings as errors; 61 tests pass on Linux, including the staged tournament runner. |
 | `FastchessDesktop.ViewModels` | Warnings as errors; 17 tests pass on Linux. |
-| `FastchessDesktop.App` | Unpackaged build confirmed on Windows at commit 95b17cd. Later XAML changes and the MSIX packaging are not yet built on Windows. |
+| `FastchessDesktop.App` | Built and installed as MSIX on Windows by the owner (package 1.0.271.8108); a two-engine match ran from the installed app, with run folders in the real `%LOCALAPPDATA%\FastchessDesktop`. |
 
 ## Changes In This Pass
 
@@ -22,6 +22,18 @@ State of the repository on 2026-09-29, after the first Windows build and the own
   `TournamentFormats`. See README for the rules.
 - Packaging: `package.ps1` builds a signed MSIX and installs or upgrades it for the current user,
   which gives a Start menu entry and a taskbar pin that follows upgrades.
+
+## Tournament Log
+
+- fastchess checks every engine's search output and prints a block ("Warning;", "Info;",
+  "Position;", "Moves;") when, for example, the best move is not the first move of the last PV.
+  These are informational; they do not change moves or results. The log shows them in amber
+  (`LogKind.Warning`, classified by `FastchessOutputParser.Classify`).
+- Real engine failures show up as game end reasons: "loses on time", "disconnects",
+  "connection stalls", "makes an illegal move", and as nonzero Timeouts/Crashed counts at the end.
+  They are shown in red, and a summary line after each run counts them.
+- The post-run import now always reports its outcome in the tournament log, including when no
+  database is open (it used to log that only on the Database page).
 
 ## Packaging Design
 

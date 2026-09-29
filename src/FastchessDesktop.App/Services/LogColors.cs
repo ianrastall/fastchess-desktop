@@ -12,6 +12,7 @@ public static class LogColors
     private static readonly SolidColorBrush Output = new(ColorHelper.FromArgb(0xFF, 0xB8, 0xB8, 0xB8));
     private static readonly SolidColorBrush Error = new(ColorHelper.FromArgb(0xFF, 0xF2, 0x8B, 0x82));
     private static readonly SolidColorBrush Success = new(ColorHelper.FromArgb(0xFF, 0x81, 0xC9, 0x95));
+    private static readonly SolidColorBrush Warning = new(ColorHelper.FromArgb(0xFF, 0xE8, 0xC0, 0x6A));
 
     public static SolidColorBrush For(LogKind kind) => kind switch
     {
@@ -19,6 +20,7 @@ public static class LogColors
         LogKind.Output => Output,
         LogKind.Error => Error,
         LogKind.Success => Success,
+        LogKind.Warning => Warning,
         _ => Info,
     };
 }
