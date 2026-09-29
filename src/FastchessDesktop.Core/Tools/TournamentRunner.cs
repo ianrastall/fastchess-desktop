@@ -36,27 +36,8 @@ public sealed class TournamentRunner(ProcessLauncher? launcher = null)
     }
 
     /// <summary>The fastchess command of the first run, for the command preview.</summary>
-    public static IReadOnlyList<string> FirstStageArguments(TournamentSettings s)
-    {
-        if (TournamentFormats.IsRunByFastchess(s.Type) || s.Engines.Count < 2) return FastchessCommandBuilder.Build(Native(s));
-        var first = s.Type switch
-        {
-            TournamentType.Pyramid => Stage(s, [s.Engines[1], s.Engines[0]], TournamentType.Gauntlet, s.Rounds, 1),
-            TournamentType.Knockout => Match(s, FirstKnockoutMatch(s), s.Rounds, 1),
-            _ => Match(s, [s.Engines[0], s.Engines[1]], s.Rounds, 1),
-        };
-        return FastchessCommandBuilder.Build(first);
-    }
-
-    private static IReadOnlyList<EngineSettings> FirstKnockoutMatch(TournamentSettings s)
-    {
-        var byName = s.Engines.ToDictionary(FastchessCommandBuilder.EngineName);
-        var pair = TournamentFormats.KnockoutFirstRound([.. byName.Keys]).First(p => p.Black is not null);
-        return [byName[pair.White], byName[pair.Black!]];
-    }
-
-    private static TournamentSettings Native(TournamentSettings s) =>
-        TournamentFormats.IsRunByFastchess(s.Type) ? s : s with { Type = TournamentType.RoundRobin };
+    public static IReadOnlyList<string> FirstStageArguments(TournamentSettings s) =>
+        FastchessCommandBuilder.FirstStageArguments(s);
 
     private static TournamentSettings Stage(TournamentSettings s, IReadOnlyList<EngineSettings> engines, TournamentType type,
         int rounds, int stage) => s with

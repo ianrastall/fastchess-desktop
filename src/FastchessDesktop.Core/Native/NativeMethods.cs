@@ -2,13 +2,16 @@ using System.Runtime.InteropServices;
 
 namespace FastchessDesktop.Core.Native;
 
-/// <summary>P/Invoke declarations for native/include/fcd/fcd.h. Keep in sync with the header.</summary>
+/// <summary>
+/// P/Invoke declarations for native/include/fcd/fcd.h (library, database, opening book). Keep in sync
+/// with the header. Tools, statistics and pairings: NativeMethods.Tools.cs.
+/// </summary>
 internal static unsafe partial class NativeMethods
 {
     private const string Library = "fcd_core";
 
     /// <summary>Must equal FCD_ABI_VERSION in fcd.h.</summary>
-    public const int ExpectedAbiVersion = 1;
+    public const int ExpectedAbiVersion = 2;
 
     [StructLayout(LayoutKind.Sequential)]
     public struct FcdQuery

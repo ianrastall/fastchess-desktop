@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace FastchessDesktop.Core.Tools;
 
 /// <summary>
@@ -160,21 +162,7 @@ public sealed record TournamentSettings
     /// <summary>Additional raw arguments appended at the end, split with Windows rules.</summary>
     public string ExtraArguments { get; init; } = "";
 
-    /// <summary>Games the schedule will play, when it can be computed.</summary>
-    public long? ExpectedGames
-    {
-        get
-        {
-            var n = Engines.Count;
-            if (n < 2 || Rounds <= 0 || GamesPerEncounter <= 0) return null;
-            long pairs = Type switch
-            {
-                TournamentType.Gauntlet => (long)Math.Clamp(Seeds, 1, n - 1) * (n - Math.Clamp(Seeds, 1, n - 1)),
-                TournamentType.Knockout => n - 1, // excluding tiebreaks
-                TournamentType.Swiss => (long)Math.Max(0, SwissRounds) * (n / 2),
-                _ => (long)n * (n - 1) / 2, // round robin and pyramid play the same pairings
-            };
-            return pairs * Rounds * GamesPerEncounter;
-        }
-    }
+    /// <summary>Games the schedule will play, when it can be computed (computed by fcd_core; not serialized).</summary>
+    [JsonIgnore]
+    public long? ExpectedGames => FastchessCommandBuilder.ExpectedGames(this);
 }

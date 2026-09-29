@@ -534,18 +534,18 @@ public sealed partial class TournamentViewModel : ObservableObject
 
     private void OnOutputLine(OutputLine line)
     {
-        var kind = FastchessOutputParser.Classify(line.Text);
+        var (kind, evt, warningEngine) = FastchessOutputParser.Analyze(line.Text);
         if (kind == FastchessLineKind.Warning && line.Text.TrimStart().StartsWith("Warning;", StringComparison.Ordinal))
         {
             Interlocked.Increment(ref _outputWarnings);
-            if (FastchessOutputParser.WarningEngine(line.Text) is { } engine)
+            if (warningEngine is { } engine)
                 _dispatcher.Post(() =>
                 {
                     _scoreboard.AddWarning(engine);
                     UpdateStandings();
                 });
         }
-        if (kind == FastchessLineKind.EngineFailure && FastchessOutputParser.Parse(line.Text) is GameFinishedEvent { IsEngineFailure: true })
+        if (kind == FastchessLineKind.EngineFailure && evt is GameFinishedEvent { IsEngineFailure: true })
             Interlocked.Increment(ref _engineFailures);
         Log.Add(line.Text, kind switch
         {
@@ -624,6 +624,7 @@ public sealed partial class TournamentViewModel : ObservableObject
         // fastchess reports pentanomial statistics only with -games 2, its own output format and a non-Bayesian SPRT.
         var pentanomial = settings.ReportPenta && !settings.CutechessOutput &&
                           !(settings.Sprt && settings.SprtModel == SprtModel.Bayesian);
+        _scoreboard.Dispose();
         _scoreboard = new TournamentScoreboard(_gamesPerEncounter, pentanomial);
         foreach (var e in settings.Engines) _scoreboard.AddEngine(FastchessCommandBuilder.EngineName(e));
         _sprt = settings.Sprt && settings.Engines.Count == 2
@@ -686,19 +687,18 @@ public sealed partial class TournamentViewModel : ObservableObject
             : "Not reported (needs 2 games per encounter)";
 
         if (_sprt is null) return;
-        var llr = _sprt.Llr(s, penta);
-        var fraction = _sprt.Fraction(llr);
-        SprtLlr = $"{TableFormat.Number(llr, "0.00")} ({TableFormat.Number(fraction * 100, "0.0")} %)";
-        SprtBounds = $"({TableFormat.Number(_sprt.LowerBound, "0.00")}, {TableFormat.Number(_sprt.UpperBound, "0.00")})";
+        var sprt = _sprt.Evaluate(s, penta);
+        SprtLlr = $"{TableFormat.Number(sprt.Llr, "0.00")} ({TableFormat.Number(sprt.Fraction * 100, "0.0")} %)";
+        SprtBounds = $"({TableFormat.Number(sprt.LowerBound, "0.00")}, {TableFormat.Number(sprt.UpperBound, "0.00")})";
         SprtHypotheses = $"[{TableFormat.Number(_sprt.Elo0, "0.00")}, {TableFormat.Number(_sprt.Elo1, "0.00")}] " +
                          _sprt.Model.ToString().ToLowerInvariant();
-        SprtStatus = _sprt.Outcome(llr) switch
+        SprtStatus = sprt.Outcome switch
         {
             SprtOutcome.AcceptH1 => $"H1 accepted: {first} gains at least elo1",
             SprtOutcome.AcceptH0 => $"H0 accepted: {first} does not gain elo1",
             _ => "Running",
         };
-        SprtProgress = double.IsFinite(fraction) ? Math.Clamp(Math.Abs(fraction) * 100, 0, 100) : 0;
+        SprtProgress = double.IsFinite(sprt.Fraction) ? Math.Clamp(Math.Abs(sprt.Fraction) * 100, 0, 100) : 0;
     }
 
     [RelayCommand]

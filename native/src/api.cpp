@@ -1,17 +1,14 @@
-// C ABI entry points. Every function catches all exceptions and converts
-// them to fcd_status plus a thread-local message.
+// C ABI entry points for the library, the game database and the opening book.
+// Every function catches all exceptions and converts them to fcd_status plus a
+// thread-local message (abi.hpp). Tools, statistics and processes: api_tools.cpp.
 #include <cstdlib>
-#include <new>
 
+#include "abi.hpp"
 #include "database.hpp"
 #include "exporters.hpp"
 #include "fcd/fcd.h"
 #include "openings.hpp"
 #include "util.hpp"
-
-#ifndef FCD_VERSION_STRING
-#define FCD_VERSION_STRING "0.0.0"
-#endif
 
 struct fcd_db {
     fcd::Database impl;
@@ -24,30 +21,8 @@ struct fcd_openings {
 
 namespace {
 
-template <typename F>
-fcd_status guarded(F&& body) {
-    try {
-        body();
-        fcd::set_last_error({});
-        return FCD_OK;
-    } catch (const fcd::Error& e) {
-        fcd::set_last_error(e.what());
-        return e.status();
-    } catch (const std::bad_alloc&) {
-        fcd::set_last_error("out of memory");
-        return FCD_ERR_INTERNAL;
-    } catch (const std::exception& e) {
-        fcd::set_last_error(e.what());
-        return FCD_ERR_INTERNAL;
-    } catch (...) {
-        fcd::set_last_error("unknown error");
-        return FCD_ERR_INTERNAL;
-    }
-}
-
-void require(const void* p, const char* what) {
-    if (!p) throw fcd::Error(FCD_ERR_ARGUMENT, std::string(what) + " is NULL");
-}
+using fcd::abi::guarded;
+using fcd::abi::require;
 
 fcd::Progress wrap(fcd_progress_fn fn, void* user) {
     if (!fn) return {};
@@ -57,14 +32,6 @@ fcd::Progress wrap(fcd_progress_fn fn, void* user) {
 }  // namespace
 
 extern "C" {
-
-FCD_API int32_t fcd_abi_version(void) { return FCD_ABI_VERSION; }
-
-FCD_API const char* fcd_version(void) { return FCD_VERSION_STRING; }
-
-FCD_API const char* fcd_last_error(void) { return fcd::last_error(); }
-
-FCD_API void fcd_free(void* p) { std::free(p); }
 
 FCD_API fcd_status fcd_db_open(const char* path, fcd_db** out_db) {
     return guarded([&] {

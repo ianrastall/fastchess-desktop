@@ -27,11 +27,12 @@ public class MatchStatisticsTests
     [Fact]
     public void Scoreboard_rebuilds_the_pentanomial_counts_fastchess_printed()
     {
-        var b = PlayMatch().StatsOf("B");
+        using var board = PlayMatch();
+        var b = board.StatsOf("B");
         // fastchess: "Games: 20, Wins: 1, Losses: 5, Draws: 14" and "Ptnml(0-2): [0, 5, 4, 1, 0], WL/DD Ratio: 0.00"
         Assert.Equal(new MatchStats(1, 14, 5, LL: 0, LD: 5, WL: 0, DD: 4, WD: 1, WW: 0), b);
-        Assert.Equal(b.Inverted, PlayMatch().StatsOf("R"));
-        Assert.Equal(b, PlayMatch().HeadToHead("B", "R"));
+        Assert.Equal(b.Inverted, board.StatsOf("R"));
+        Assert.Equal(b, board.HeadToHead("B", "R"));
     }
 
     [Fact]
@@ -51,13 +52,12 @@ public class MatchStatisticsTests
     public void Sprt_matches_the_fastchess_report()
     {
         // fastchess: "LLR: -0.04 (-1.2%) (-2.94, 2.94) [0.00, 2.00]"
-        var sprt = new SprtTest(0.05, 0.05, 0, 2, SprtModel.Normalized);
-        var llr = sprt.Llr(PlayMatch().StatsOf("B"), pentanomial: true);
-        Assert.Equal(-0.04, Math.Round(llr, 2));
-        Assert.Equal(-1.2, Math.Round(sprt.Fraction(llr) * 100, 1));
+        var sprt = new SprtTest(0.05, 0.05, 0, 2, SprtModel.Normalized).Evaluate(PlayMatch().StatsOf("B"), pentanomial: true);
+        Assert.Equal(-0.04, Math.Round(sprt.Llr, 2));
+        Assert.Equal(-1.2, Math.Round(sprt.Fraction * 100, 1));
         Assert.Equal(-2.94, Math.Round(sprt.LowerBound, 2));
         Assert.Equal(2.94, Math.Round(sprt.UpperBound, 2));
-        Assert.Equal(SprtOutcome.Continue, sprt.Outcome(llr));
+        Assert.Equal(SprtOutcome.Continue, sprt.Outcome);
     }
 
     [Theory]
@@ -70,8 +70,8 @@ public class MatchStatisticsTests
     {
         var sprt = new SprtTest(0.05, 0.05, 0, 5, model);
         var strong = new MatchStats(600, 900, 300, LL: 20, LD: 150, WL: 80, DD: 300, WD: 250, WW: 100);
-        Assert.Equal(SprtOutcome.AcceptH1, sprt.Outcome(sprt.Llr(strong, pairs)));
-        Assert.Equal(SprtOutcome.AcceptH0, sprt.Outcome(sprt.Llr(strong.Inverted, pairs)));
+        Assert.Equal(SprtOutcome.AcceptH1, sprt.Evaluate(strong, pairs).Outcome);
+        Assert.Equal(SprtOutcome.AcceptH0, sprt.Evaluate(strong.Inverted, pairs).Outcome);
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public class MatchStatisticsTests
     [Fact]
     public void Scoreboard_counts_failures_and_warnings_per_engine()
     {
-        var board = new TournamentScoreboard(2, pentanomial: false);
+        using var board = new TournamentScoreboard(2, pentanomial: false);
         board.AddGame(1, "A", "B", "1-0", "Black loses on time (12ms overrun)");
         board.AddGame(2, "B", "A", "0-1", "White disconnects");
         board.AddGame(3, "A", "B", "*", "Game interrupted");

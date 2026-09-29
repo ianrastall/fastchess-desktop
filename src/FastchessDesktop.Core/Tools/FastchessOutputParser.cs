@@ -1,5 +1,5 @@
-using System.Globalization;
-using System.Text.RegularExpressions;
+using System.Text.Json;
+using FastchessDesktop.Core.Native;
 
 namespace FastchessDesktop.Core.Tools;
 
@@ -31,76 +31,45 @@ public enum FastchessLineKind
     EngineFailure,
 }
 
+/// <summary>One line of fastchess output: how to show it, the event it reports, and the engine a warning is about.</summary>
+public sealed record FastchessLine(FastchessLineKind Kind, FastchessEvent? Event, string? WarningEngine);
+
 /// <summary>
-/// Recognizes the progress lines fastchess prints in both output formats
-/// (app/src/matchmaking/output/output_fastchess.hpp and output_cutechess.hpp).
-/// Other lines are left to the log.
+/// Recognizes fastchess progress lines (both output formats) and classifies warnings and engine
+/// failures. Implemented in fcd_core (fcd_fastchess_parse_line).
 /// </summary>
-public static partial class FastchessOutputParser
+public static class FastchessOutputParser
 {
-    [GeneratedRegex(@"^Started game (\d+) of (\d+) \((.+) vs (.+)\)\s*$")]
-    private static partial Regex StartedRegex();
-
-    [GeneratedRegex(@"^Finished game (\d+) \((.+) vs (.+)\): (1-0|0-1|1/2-1/2|\*) \{(.*)\}\s*$")]
-    private static partial Regex FinishedRegex();
-
-    public static FastchessEvent? Parse(string line)
+    public static FastchessLine Analyze(string line)
     {
-        var m = StartedRegex().Match(line);
-        if (m.Success)
-            return new GameStartedEvent(Int(m.Groups[1].Value), Int(m.Groups[2].Value), m.Groups[3].Value,
-                m.Groups[4].Value);
-
-        m = FinishedRegex().Match(line);
-        if (m.Success)
-            return new GameFinishedEvent(Int(m.Groups[1].Value), m.Groups[2].Value, m.Groups[3].Value,
-                m.Groups[4].Value, m.Groups[5].Value);
-
-        var trimmed = line.Trim();
-        // "Tournament finished", or "SPRT (...) completed - H0 was accepted" (roundrobin.cpp).
-        if (trimmed == "Tournament finished" ||
-            (trimmed.StartsWith("SPRT (", StringComparison.Ordinal) && trimmed.EndsWith(" was accepted", StringComparison.Ordinal)))
-            return new TournamentFinishedEvent(trimmed);
-        return null;
+        var status = NativeMethods.FastchessParseLine(line, out var raw);
+        var dto = JsonSerializer.Deserialize(NativeMethods.TakeChecked(status, raw), ToolJsonContext.Default.ParsedLineDto)!;
+        var kind = dto.Kind switch
+        {
+            "warning" => FastchessLineKind.Warning,
+            "engineFailure" => FastchessLineKind.EngineFailure,
+            _ => FastchessLineKind.Normal,
+        };
+        return new FastchessLine(kind, ToEvent(dto.Event), dto.WarningEngine);
     }
 
-    // Game end reasons from match.hpp that mean an engine failed.
-    private static readonly string[] FailureReasons =
-        [" loses on time", " disconnects", "'s connection stalls", " makes an illegal move", "Game interrupted"];
+    public static FastchessEvent? Parse(string line) => Analyze(line).Event;
 
-    // Prefixes of the lines fastchess prints for one engine-output warning (match.cpp).
-    private static readonly string[] WarningPrefixes = ["Warning;", "Info;", "Infos;", "Position;", "Moves;"];
+    public static FastchessLineKind Classify(string line) => Analyze(line).Kind;
 
-    [GeneratedRegex(@"^\s*(Timeouts|Crashed): (\d+)\s*$")]
-    private static partial Regex TrackerRegex();
+    /// <summary>The engine a "Warning;" line is about (fastchess ends them with "from &lt;engine&gt;"); null otherwise.</summary>
+    public static string? WarningEngine(string line) => Analyze(line).WarningEngine;
 
-    /// <summary>
-    /// The engine a "Warning;" line is about. fastchess ends these with "from &lt;engine name&gt;"
-    /// (match.cpp); returns null for other lines.
-    /// </summary>
-    public static string? WarningEngine(string line)
+    public static bool IsEngineFailureReason(string reason) => NativeMethods.IsEngineFailureReason(reason) != 0;
+
+    internal static FastchessEvent? ToEvent(FastchessEventDto? e) => e?.Type switch
     {
-        var trimmed = line.Trim();
-        if (!trimmed.StartsWith("Warning;", StringComparison.Ordinal)) return null;
-        var at = trimmed.LastIndexOf(" from ", StringComparison.Ordinal);
-        return at < 0 ? null : trimmed[(at + " from ".Length)..];
-    }
-
-    public static bool IsEngineFailureReason(string reason) =>
-        FailureReasons.Any(r => reason.Contains(r, StringComparison.Ordinal));
-
-    public static FastchessLineKind Classify(string line)
-    {
-        if (FinishedRegex().Match(line) is { Success: true } finished)
-            return IsEngineFailureReason(finished.Groups[5].Value) ? FastchessLineKind.EngineFailure : FastchessLineKind.Normal;
-        // "Player: X / Timeouts: n / Crashed: n", printed at the end when an engine timed out or crashed.
-        if (TrackerRegex().Match(line) is { Success: true } tracker)
-            return tracker.Groups[2].Value == "0" ? FastchessLineKind.Normal : FastchessLineKind.EngineFailure;
-        var trimmed = line.TrimStart();
-        return WarningPrefixes.Any(p => trimmed.StartsWith(p, StringComparison.Ordinal))
-            ? FastchessLineKind.Warning
-            : FastchessLineKind.Normal;
-    }
-
-    private static int Int(string s) => int.Parse(s, NumberStyles.Integer, CultureInfo.InvariantCulture);
+        "gameStarted" => new GameStartedEvent(e.Number, e.Total, e.White ?? "", e.Black ?? ""),
+        "gameFinished" => new GameFinishedEvent(e.Number, e.White ?? "", e.Black ?? "", e.Result ?? "", e.Reason ?? ""),
+        "tournamentFinished" => new TournamentFinishedEvent(e.Message ?? ""),
+        "stageStarted" => new StageStartedEvent(e.Stage, e.Description ?? ""),
+        "commandStarted" => new CommandStartedEvent(e.CommandLine ?? ""),
+        "note" => new TournamentNoteEvent(e.Message ?? ""),
+        _ => null,
+    };
 }

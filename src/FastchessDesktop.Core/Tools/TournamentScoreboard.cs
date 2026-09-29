@@ -1,82 +1,52 @@
+using FastchessDesktop.Core.Native;
+
 namespace FastchessDesktop.Core.Tools;
 
 /// <summary>
-/// Live results of a tournament, built from fastchess's "Finished game" lines. Game counts update
-/// with every game; pentanomial counts update when both games of a pair are done. Pairs are
-/// identified as fastchess schedules them (base_scheduler.hpp): game numbers 1..n per pair of
-/// <c>gamesPerEncounter</c> consecutive games, which the staged formats preserve.
+/// Live results of a tournament, built from fastchess's "Finished game" lines by fcd_core. Game
+/// counts update with every game; pentanomial counts when both games of a pair are done (pairs are
+/// games (n - 1) / gamesPerEncounter, as fastchess schedules them). Not thread-safe.
 /// </summary>
-public sealed class TournamentScoreboard(int gamesPerEncounter, bool pentanomial)
+public sealed class TournamentScoreboard : IDisposable
 {
-    private readonly Dictionary<string, MatchStats> _stats = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, int> _failures = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, int> _warnings = new(StringComparer.Ordinal);
-    private readonly Dictionary<(string, string), MatchStats> _headToHead = [];
-    private readonly Dictionary<int, (string White, string Black, double WhiteScore)> _openPairs = [];
-    private readonly List<string> _engines = [];
+    private readonly ScoreboardHandle _handle;
+
+    public TournamentScoreboard(int gamesPerEncounter, bool pentanomial)
+    {
+        NativeMethods.Check(NativeMethods.ScoreboardNew(gamesPerEncounter, pentanomial ? 1 : 0, out var raw));
+        _handle = new ScoreboardHandle(raw);
+    }
 
     /// <summary>True when Elo, LOS and the SPRT use completed pairs (fastchess -report penta with -games 2).</summary>
-    public bool Pentanomial { get; } = pentanomial && gamesPerEncounter == 2;
+    public bool Pentanomial => NativeMethods.ScoreboardIsPentanomial(_handle) != 0;
 
-    /// <summary>Engines in the order they first appeared.</summary>
-    public IReadOnlyList<string> Engines => _engines;
-
-    public void AddEngine(string name)
+    /// <summary>Engines in the order they were added or first played.</summary>
+    public IReadOnlyList<string> Engines
     {
-        if (_stats.ContainsKey(name)) return;
-        _engines.Add(name);
-        _stats[name] = default;
+        get
+        {
+            var status = NativeMethods.ScoreboardEngines(_handle, out var json);
+            return NativeMethods.TakeStringList(status, json);
+        }
     }
+
+    public void AddEngine(string name) => NativeMethods.Check(NativeMethods.ScoreboardAddEngine(_handle, name));
 
     /// <summary>Records a finished game. Unfinished results ("*") are ignored.</summary>
-    public void AddGame(int number, string white, string black, string result, string reason)
-    {
-        double? whiteScore = result switch { "1-0" => 1, "0-1" => 0, "1/2-1/2" => 0.5, _ => null };
-        if (whiteScore is not { } ws) return;
-        AddEngine(white);
-        AddEngine(black);
-        Add(white, black, GameStats(ws));
-
-        if (FastchessOutputParser.IsEngineFailureReason(reason))
-        {
-            var culprit = reason.StartsWith("White", StringComparison.Ordinal) ? white
-                : reason.StartsWith("Black", StringComparison.Ordinal) ? black : null;
-            if (culprit is not null) _failures[culprit] = Failures(culprit) + 1;
-        }
-
-        if (!Pentanomial || number < 1) return;
-        var pair = (number - 1) / gamesPerEncounter;
-        if (!_openPairs.Remove(pair, out var first))
-        {
-            _openPairs[pair] = (white, black, ws);
-            return;
-        }
-        if (first.White != black || first.Black != white) return; // not the color-swapped partner
-
-        // Both games from the point of view of the engine that had White in the first game.
-        var pairStats = (first.WhiteScore + (1 - ws)) switch
-        {
-            2.0 => new MatchStats(0, 0, 0, WW: 1),
-            1.5 => new MatchStats(0, 0, 0, WD: 1),
-            1.0 when first.WhiteScore == 0.5 => new MatchStats(0, 0, 0, DD: 1),
-            1.0 => new MatchStats(0, 0, 0, WL: 1),
-            0.5 => new MatchStats(0, 0, 0, LD: 1),
-            _ => new MatchStats(0, 0, 0, LL: 1),
-        };
-        Add(first.White, first.Black, pairStats);
-    }
+    public void AddGame(int number, string white, string black, string result, string reason) =>
+        NativeMethods.Check(NativeMethods.ScoreboardAddGame(_handle, number, white, black, result, reason));
 
     /// <summary>Counts one of fastchess's engine-output warnings against an engine it knows.</summary>
-    public void AddWarning(string engine)
-    {
-        if (_stats.ContainsKey(engine)) _warnings[engine] = Warnings(engine) + 1;
-    }
+    public void AddWarning(string engine) => NativeMethods.Check(NativeMethods.ScoreboardAddWarning(_handle, engine));
 
-    public MatchStats StatsOf(string engine) => _stats.GetValueOrDefault(engine);
+    public MatchStats StatsOf(string engine) => MatchStats.FromNative(Totals(engine).Stats);
 
     /// <summary>Results of <paramref name="engine"/> against <paramref name="opponent"/> only.</summary>
-    public MatchStats HeadToHead(string engine, string opponent) =>
-        _headToHead.GetValueOrDefault((engine, opponent));
+    public MatchStats HeadToHead(string engine, string opponent)
+    {
+        NativeMethods.Check(NativeMethods.ScoreboardHeadToHead(_handle, engine, opponent, out var s));
+        return MatchStats.FromNative(s);
+    }
 
     public EloEstimate? EloOf(string engine) => Estimate(StatsOf(engine));
 
@@ -84,22 +54,15 @@ public sealed class TournamentScoreboard(int gamesPerEncounter, bool pentanomial
         Pentanomial ? EloEstimate.FromPairs(stats) : EloEstimate.FromGames(stats);
 
     /// <summary>Games the engine lost by time forfeit, disconnect, stall or illegal move.</summary>
-    public int Failures(string engine) => _failures.GetValueOrDefault(engine);
+    public int Failures(string engine) => Totals(engine).Failures;
 
-    public int Warnings(string engine) => _warnings.GetValueOrDefault(engine);
+    public int Warnings(string engine) => Totals(engine).Warnings;
 
-    private void Add(string engine, string opponent, MatchStats stats)
+    public void Dispose() => _handle.Dispose();
+
+    private NativeMethods.FcdEngineTotals Totals(string engine)
     {
-        _stats[engine] = StatsOf(engine) + stats;
-        _stats[opponent] = StatsOf(opponent) + stats.Inverted;
-        _headToHead[(engine, opponent)] = HeadToHead(engine, opponent) + stats;
-        _headToHead[(opponent, engine)] = HeadToHead(opponent, engine) + stats.Inverted;
+        NativeMethods.Check(NativeMethods.ScoreboardEngine(_handle, engine, out var totals));
+        return totals;
     }
-
-    private static MatchStats GameStats(double whiteScore) => whiteScore switch
-    {
-        1 => new MatchStats(1, 0, 0),
-        0 => new MatchStats(0, 0, 1),
-        _ => new MatchStats(0, 1, 0),
-    };
 }

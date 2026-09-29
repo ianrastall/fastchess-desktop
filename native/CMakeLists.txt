@@ -21,11 +21,19 @@ endif()
 
 add_library(fcd_core SHARED
     src/api.cpp
+    src/api_library.cpp
+    src/api_tools.cpp
     src/chess_rules.cpp
+    src/cmdline.cpp
     src/database.cpp
     src/exporters.cpp
+    src/fastchess.cpp
+    src/formats.cpp
     src/game.cpp
+    src/json.cpp
     src/openings.cpp
+    src/stats.cpp
+    src/tools.cpp
     src/util.cpp
 )
 target_include_directories(fcd_core
@@ -46,7 +54,7 @@ endif()
 
 if(FCD_BUILD_TESTS)
     enable_testing()
-    add_executable(fcd_tests tests/fcd_tests.cpp)
+    add_executable(fcd_tests tests/fcd_tests.cpp tests/tools_tests.cpp)
     target_link_libraries(fcd_tests PRIVATE fcd_core)
     target_compile_definitions(fcd_tests PRIVATE
         FCD_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data"

@@ -1,4 +1,4 @@
-using System.Globalization;
+using FastchessDesktop.Core.Native;
 
 namespace FastchessDesktop.Core.Tools;
 
@@ -49,43 +49,19 @@ public enum OrdoprepFilter
     MajorGroupOnly,
 }
 
+/// <summary>Ordoprep and Ordo arguments, built by fcd_core.</summary>
 public static class RatingToolArgs
 {
-    private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
-
     public static IReadOnlyList<string> Ordoprep(RatingSettings s, string inputPgn, string outputPgn)
     {
-        var a = new List<string> { "-p", inputPgn, "-o", outputPgn };
-        switch (s.OrdoprepFilter)
-        {
-            case OrdoprepFilter.RemovePerfectScores:
-                a.Add("-d");
-                break;
-            case OrdoprepFilter.MinGames:
-                a.AddRange(["-M", Math.Max(1, s.MinGames).ToString(Inv)]);
-                break;
-            case OrdoprepFilter.MajorGroupOnly:
-                a.Add("--major-only");
-                break;
-            case OrdoprepFilter.None:
-                break;
-        }
-        return a;
+        var status = NativeMethods.OrdoprepArgs(NativeMethods.ToJson(s), inputPgn, outputPgn, out var json);
+        return NativeMethods.TakeStringList(status, json);
     }
 
     public static IReadOnlyList<string> Ordo(RatingSettings s, string inputPgn, string reportTxt, string ratingsCsv)
     {
-        var a = new List<string> { "-p", inputPgn, "-o", reportTxt, "-c", ratingsCsv, "-a", s.Average.ToString(Inv) };
-        if (!string.IsNullOrWhiteSpace(s.AnchorPlayer)) a.AddRange(["-A", s.AnchorPlayer.Trim()]);
-        if (s.WhiteAdvantageAuto) a.Add("-W");
-        if (s.DrawRateAuto) a.Add("-D");
-        if (s.Simulations > 0)
-        {
-            a.AddRange(["-s", s.Simulations.ToString(Inv)]);
-            if (s.Cpus > 1) a.AddRange(["-n", s.Cpus.ToString(Inv)]);
-        }
-        a.AddRange(["-N", s.Decimals.ToString(Inv)]);
-        return a;
+        var status = NativeMethods.OrdoArgs(NativeMethods.ToJson(s), inputPgn, reportTxt, ratingsCsv, out var json);
+        return NativeMethods.TakeStringList(status, json);
     }
 }
 
@@ -104,34 +80,19 @@ public enum PgnExtractPreset
     Custom,
 }
 
+/// <summary>pgn-extract arguments, built by fcd_core.</summary>
 public static class PgnExtractArgs
 {
     /// <summary>
     /// Arguments for one pgn-extract run over inputPgn writing outputPgn. customArgs are appended
     /// for every preset, so a preset can be refined (for example with -t tag criteria).
+    /// Opening classification without an ECO file throws ArgumentException.
     /// </summary>
     public static IReadOnlyList<string> Build(PgnExtractPreset preset, string customArgs, string ecoPgnPath,
         string inputPgn, string outputPgn)
     {
-        var a = new List<string>();
-        switch (preset)
-        {
-            case PgnExtractPreset.ClassifyOpenings:
-                if (string.IsNullOrWhiteSpace(ecoPgnPath))
-                    throw new ArgumentException("Opening classification needs an ECO file.", nameof(ecoPgnPath));
-                a.Add("-e" + ecoPgnPath); // pgn-extract requires the path attached to -e
-                break;
-            case PgnExtractPreset.RemoveDuplicates:
-                a.Add("-D");
-                break;
-            case PgnExtractPreset.FixResultTags:
-                a.AddRange(["--fixresulttags", "--plycount"]);
-                break;
-            case PgnExtractPreset.Custom:
-                break;
-        }
-        a.AddRange(CommandLine.Split(customArgs));
-        a.AddRange(["--quiet", "-o", outputPgn, inputPgn]);
-        return a;
+        var status = NativeMethods.PgnExtractArgs((int)preset, customArgs, ecoPgnPath, inputPgn, outputPgn, out var json);
+        NativeMethods.CheckArgument(status);
+        return NativeMethods.TakeStringList(status, json);
     }
 }

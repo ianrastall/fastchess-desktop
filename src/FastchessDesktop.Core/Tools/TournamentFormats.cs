@@ -1,9 +1,12 @@
+using System.Text.Json;
+using FastchessDesktop.Core.Native;
+
 namespace FastchessDesktop.Core.Tools;
 
 /// <summary>A pairing; <see cref="Black"/> is null for a bye. White is listed first to fastchess.</summary>
 public sealed record Pairing(string White, string? Black);
 
-/// <summary>Pairing rules for the formats fastchess does not provide itself.</summary>
+/// <summary>Pairing rules for the formats fastchess does not provide itself, implemented in fcd_core.</summary>
 public static class TournamentFormats
 {
     public static bool IsRunByFastchess(TournamentType type) =>
@@ -15,20 +18,10 @@ public static class TournamentFormats
     /// </summary>
     public static IReadOnlyList<int> BracketOrder(int size)
     {
-        if (size < 2 || (size & (size - 1)) != 0) throw new ArgumentOutOfRangeException(nameof(size), "size must be a power of two >= 2");
-        var seeds = new List<int> { 1 };
-        while (seeds.Count < size)
-        {
-            var next = new List<int>(seeds.Count * 2);
-            var sum = seeds.Count * 2 + 1;
-            foreach (var s in seeds)
-            {
-                next.Add(s);
-                next.Add(sum - s);
-            }
-            seeds = next;
-        }
-        return seeds;
+        var status = NativeMethods.PairingBracketOrder(size, out var json);
+        if (status == FcdStatus.Argument)
+            throw new ArgumentOutOfRangeException(nameof(size), "size must be a power of two >= 2");
+        return JsonSerializer.Deserialize(NativeMethods.TakeChecked(status, json), ToolJsonContext.Default.ListInt32) ?? [];
     }
 
     /// <summary>
@@ -37,27 +30,16 @@ public static class TournamentFormats
     /// </summary>
     public static IReadOnlyList<Pairing> KnockoutFirstRound(IReadOnlyList<string> seeded)
     {
-        if (seeded.Count < 2) throw new ArgumentException("A knockout needs at least two players.", nameof(seeded));
-        var size = 2;
-        while (size < seeded.Count) size *= 2;
-        var order = BracketOrder(size);
-        var pairs = new List<Pairing>();
-        for (var i = 0; i < order.Count; i += 2)
-        {
-            var a = order[i] <= seeded.Count ? seeded[order[i] - 1] : null;
-            var b = order[i + 1] <= seeded.Count ? seeded[order[i + 1] - 1] : null;
-            pairs.Add(a is null ? new Pairing(b!, null) : new Pairing(a, b));
-        }
-        return pairs;
+        var status = NativeMethods.PairingKnockoutFirstRound(NativeMethods.ToJson(seeded), out var json);
+        NativeMethods.CheckArgument(status);
+        return Pairings(NativeMethods.TakeChecked(status, json));
     }
 
     /// <summary>Next knockout round: winners of adjacent matches meet.</summary>
     public static IReadOnlyList<Pairing> KnockoutNextRound(IReadOnlyList<string> winnersInBracketOrder)
     {
-        var pairs = new List<Pairing>();
-        for (var i = 0; i + 1 < winnersInBracketOrder.Count; i += 2)
-            pairs.Add(new Pairing(winnersInBracketOrder[i], winnersInBracketOrder[i + 1]));
-        return pairs;
+        var status = NativeMethods.PairingKnockoutNextRound(NativeMethods.ToJson(winnersInBracketOrder), out var json);
+        return Pairings(NativeMethods.TakeChecked(status, json));
     }
 
     /// <summary>
@@ -74,53 +56,14 @@ public static class TournamentFormats
         IReadOnlySet<string> hadBye,
         IReadOnlyDictionary<string, int> whiteCounts)
     {
-        var seed = seeded.Select((name, i) => (name, i)).ToDictionary(t => t.name, t => t.i);
-        var ranked = seeded.OrderByDescending(p => scores.GetValueOrDefault(p)).ThenBy(p => seed[p]).ToList();
-
-        string? bye = null;
-        if (ranked.Count % 2 == 1)
-        {
-            bye = ranked.LastOrDefault(p => !hadBye.Contains(p)) ?? ranked[^1];
-            ranked.Remove(bye);
-        }
-
-        var budget = SearchBudget;
-        var pairs = TryPair(ranked, opponents, allowRematch: false, ref budget);
-        if (pairs is null)
-        {
-            budget = int.MaxValue; // with rematches allowed the first attempt always succeeds
-            pairs = TryPair(ranked, opponents, allowRematch: true, ref budget)!;
-        }
-        var ordered = pairs.Select(p =>
-        {
-            var (a, b) = p;
-            var wa = whiteCounts.GetValueOrDefault(a);
-            var wb = whiteCounts.GetValueOrDefault(b);
-            return wb < wa ? new Pairing(b, a) : new Pairing(a, b);
-        }).ToList();
-        return (ordered, bye);
+        var state = new SwissStateDto(seeded, scores,
+            opponents.ToDictionary(kv => kv.Key, kv => kv.Value.ToList()), [.. hadBye], whiteCounts);
+        var status = NativeMethods.PairingSwissRound(JsonSerializer.Serialize(state, ToolJsonContext.Default.SwissStateDto),
+            out var json);
+        var round = JsonSerializer.Deserialize(NativeMethods.TakeChecked(status, json), ToolJsonContext.Default.SwissRoundDto)!;
+        return ([.. round.Pairs.Select(p => new Pairing(p.White, p.Black))], round.Bye);
     }
 
-    /// <summary>Upper bound on backtracking steps before rematches are allowed.</summary>
-    private const int SearchBudget = 200_000;
-
-    private static List<(string, string)>? TryPair(List<string> ranked,
-        IReadOnlyDictionary<string, HashSet<string>> opponents, bool allowRematch, ref int budget)
-    {
-        if (ranked.Count == 0) return [];
-        if (--budget < 0) return null;
-        var first = ranked[0];
-        for (var j = 1; j < ranked.Count; j++)
-        {
-            var candidate = ranked[j];
-            if (!allowRematch && opponents.TryGetValue(first, out var met) && met.Contains(candidate)) continue;
-            var rest = ranked.Where((_, k) => k != 0 && k != j).ToList();
-            var tail = TryPair(rest, opponents, allowRematch, ref budget);
-            if (budget < 0) return null;
-            if (tail is null) continue;
-            tail.Insert(0, (first, candidate));
-            return tail;
-        }
-        return null;
-    }
+    private static List<Pairing> Pairings(string json) =>
+        [.. (JsonSerializer.Deserialize(json, ToolJsonContext.Default.ListPairingDto) ?? []).Select(p => new Pairing(p.White, p.Black))];
 }

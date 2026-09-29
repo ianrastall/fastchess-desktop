@@ -1,4 +1,5 @@
-// Tests for the fcd_core C ABI. Uses only the public header.
+// Tests for the fcd_core C ABI: database, openings, exports. Uses only the public header.
+// Other groups: tools_tests.cpp (command lines, statistics, pairings).
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -11,46 +12,18 @@
 
 #include "fcd/fcd.h"
 
+#include "check.hpp"
+
 namespace {
 
-int g_failures = 0;
-int g_checks = 0;
-
-#define CHECK(cond)                                                                  \
-    do {                                                                             \
-        ++g_checks;                                                                  \
-        if (!(cond)) {                                                               \
-            ++g_failures;                                                            \
-            std::fprintf(stderr, "%s:%d: CHECK failed: %s\n", __FILE__, __LINE__, #cond); \
-        }                                                                            \
-    } while (0)
-
-#define CHECK_OK(expr)                                                                          \
-    do {                                                                                        \
-        ++g_checks;                                                                             \
-        const fcd_status st_ = (expr);                                                          \
-        if (st_ != FCD_OK) {                                                                    \
-            ++g_failures;                                                                       \
-            std::fprintf(stderr, "%s:%d: %s returned %d: %s\n", __FILE__, __LINE__, #expr, st_, \
-                         fcd_last_error());                                                     \
-        }                                                                                       \
-    } while (0)
-
-std::string take(char* p) {
-    std::string s = p ? p : "";
-    fcd_free(p);
-    return s;
-}
+using fcd_test::contains;
+using fcd_test::take;
 
 std::string read_file(const std::filesystem::path& p) {
     std::ifstream in(p, std::ios::binary);
     std::stringstream ss;
     ss << in.rdbuf();
     return ss.str();
-}
-
-bool contains(const std::string& haystack, const std::string& needle) {
-    return haystack.find(needle) != std::string::npos;
 }
 
 std::filesystem::path temp_dir() {
@@ -304,6 +277,7 @@ int main() {
     test_openings_and_fill(dir);
     test_ratings(dir);
     test_exports(dir);
-    std::printf("%d checks, %d failures\n", g_checks, g_failures);
-    return g_failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+    run_tools_tests();
+    std::printf("%d checks, %d failures\n", fcd_test::g_checks, fcd_test::g_failures);
+    return fcd_test::g_failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
