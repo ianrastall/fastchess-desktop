@@ -1,17 +1,22 @@
 namespace FastchessDesktop.Core.Tools;
 
-/// <summary>Locations of the external programs and data files. Empty means not configured.</summary>
+/// <summary>
+/// Locations of the external programs and data files. Empty means not configured. A path missing
+/// from a settings file reads as empty: the JSON source generator sets init-only properties that are
+/// absent from the file to null, so a settings file written before a path existed would otherwise
+/// yield null (as RatingList did).
+/// </summary>
 public sealed record ToolPaths
 {
-    public string Fastchess { get; init; } = "";
-    public string Stockfish { get; init; } = "";
-    public string Ordo { get; init; } = "";
-    public string Ordoprep { get; init; } = "";
-    public string PgnExtract { get; init; } = "";
-    public string OpeningsTsv { get; init; } = "";
+    public string Fastchess { get => field ?? ""; init; } = "";
+    public string Stockfish { get => field ?? ""; init; } = "";
+    public string Ordo { get => field ?? ""; init; } = "";
+    public string Ordoprep { get => field ?? ""; init; } = "";
+    public string PgnExtract { get => field ?? ""; init; } = "";
+    public string OpeningsTsv { get => field ?? ""; init; } = "";
 
     /// <summary>Engine rating list (Ordo CSV) used to rate and sort the tournament's engines.</summary>
-    public string RatingList { get; init; } = "";
+    public string RatingList { get => field ?? ""; init; } = "";
 
     /// <summary>
     /// Fills empty entries from the application's bundled layout:

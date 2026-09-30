@@ -11,6 +11,29 @@ State of the repository on 2026-09-29, after the Stop fix and engine ratings fro
 | `FastchessDesktop.ViewModels` | Warnings as errors; 23 tests pass on Linux. |
 | `FastchessDesktop.App` | Changed in this pass (engine list template, legend, Sort button, rating list setting, tier brushes, `TierColors.cs`). Not compiled: the XAML compiler only runs on Windows. The last Windows build was package 1.0.271.30217, before this pass. |
 
+## Root cause found: a null rating list path from older settings files
+
+The owner's errors.log (written by the handler added below) showed a NullReferenceException in
+`SettingsViewModel.ToToolPaths()` at startup, when saved engines were loaded, and on window close.
+Cause: settings.json written by the previous version has no `tools.ratingList`. The System.Text.Json
+source generator sets init-only properties that are missing from the file to null instead of
+keeping the initializer's default, so `ToolPaths.RatingList` came back null and `.Trim()` threw.
+That stopped `TournamentViewModel.Load` partway (no saved engines in the list), broke every later
+`UpdatePreview` (so adding an engine failed before it reached the list), and stopped settings from
+being saved on close (so the owner's settings.json still holds the old engines).
+
+Fix: every `ToolPaths` path reads a missing or null value as "" (`get => field ?? ""`). Test
+`Settings_saved_before_the_rating_list_existed_still_load` saves a full settings file, removes
+`ratingList`, and starts the view models from it; it fails with the same exception on the old code.
+
+Hazard for future changes: any new init-only property on a record stored in settings.json
+(AppSettings, ToolPaths, TournamentSettings, AnalysisSettings, RatingSettings) loads as null or 0
+from older files, and a missing section loads as null. Make new members null-tolerant, or give them
+a default in the getter, and test with a settings file from the previous version.
+
+The changes in the section below were made before the log was available. They were not the fix,
+but they are kept: the error handler is what exposed the cause.
+
 ## Follow-up: adding engines did nothing (reported after installing this pass)
 
 The owner reported that after this pass Add engine did nothing: no engine in the list, empty
@@ -221,8 +244,6 @@ owner's real tournament.
 
 ## Unresolved Issues
 
-- The cause of "adding engines does nothing" was not identified; see the follow-up section. The
-  next report should include errors.log and the tournament log.
 - The root cause of the reported Stop problem was not reproduced; see "Stopping a tournament" for
   what was fixed. If the page still locks up after Stop, the log now shows which stage it reached.
 - Engines not in the rating list (development builds, renamed binaries) are unrated; there is no

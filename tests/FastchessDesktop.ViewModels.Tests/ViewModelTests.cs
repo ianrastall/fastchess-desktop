@@ -332,6 +332,35 @@ public sealed class TournamentViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Settings_saved_before_the_rating_list_existed_still_load()
+    {
+        // A settings file from before ToolPaths.RatingList: the missing path must not become null.
+        Directory.CreateDirectory(_env.DataDirectory);
+        var path = Path.Combine(_env.DataDirectory, "s.json");
+        new SettingsStore(path).Save(new AppSettings
+        {
+            Tournament = new TournamentSettings
+            {
+                Engines = [new EngineSettings { Name = "Stockfish 18", Command = "s.exe" }, new EngineSettings { Name = "Weak 1", Command = "w.exe" }],
+            },
+        });
+        var json = File.ReadAllText(path);
+        var old = System.Text.RegularExpressions.Regex.Replace(json, @",\s*""ratingList"": """"", "");
+        Assert.NotEqual(json, old);
+        File.WriteAllText(path, old);
+        var csv = Path.Combine(_env.AppDirectory, "data", "ucerl-ratings.csv");  // the bundled default location
+        Directory.CreateDirectory(Path.GetDirectoryName(csv)!);
+        File.WriteAllText(csv, "\"#\",\"PLAYER\",\"RATING\",\"PLAYED\"\n1,\"Stockfish 18\",3823.3,461772\n");
+
+        await _shell.InitializeAsync();
+        Assert.Equal("", _shell.Settings.RatingListPath);
+        Assert.Equal(["Stockfish 18", "Weak 1"], _shell.Tournament.Engines.Select(e => e.Name));
+        Assert.Equal("3823", _shell.Tournament.Engines[0].RatingText);
+        _shell.SaveSettings();
+        Assert.Contains("\"ratingList\": \"\"", File.ReadAllText(path), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Missing_executable_keeps_the_provisional_name()
     {
         var vm = _shell.Tournament;
